@@ -1,0 +1,173 @@
+[
+  {
+    "id": "HT001",
+    "name": "Grand Plaza Hotel",
+    "city": "Los Angeles",
+    "rating": 4.5,
+    "price_per_night": 199.99,
+    "amenities": ["WiFi", "Pool", "Gym", "Restaurant", "Parking"],
+    "address": "123 Downtown Ave, Los Angeles, CA"
+  },
+  {
+    "id": "HT002",
+    "name": "Sunset Beach Resort",
+    "city": "Los Angeles",
+    "rating": 4.8,
+    "price_per_night": 299.99,
+    "amenities": ["WiFi", "Pool", "Beach Access", "Spa", "Restaurant", "Bar"],
+    "address": "456 Ocean Drive, Los Angeles, CA"
+  },
+  {
+    "id": "HT003",
+    "name": "Budget Inn Downtown",
+    "city": "Los Angeles",
+    "rating": 3.5,
+    "price_per_night": 89.99,
+    "amenities": ["WiFi", "Parking", "24hr Front Desk"],
+    "address": "789 Central St, Los Angeles, CA"
+  },
+  {
+    "id": "HT019",
+    "name": "Metro Saver Inn",
+    "city": "Los Angeles",
+    "rating": 3.4,
+    "price_per_night": 65.0,
+    "amenities": ["WiFi", "Complimentary Coffee", "Self Check-in"],
+    "address": "950 Olympic Blvd, Los Angeles, CA"
+  },
+  {
+    "id": "HT004",
+    "name": "Manhattan Grand Hotel",
+    "city": "New York",
+    "rating": 4.6,
+    "price_per_night": 249.99,
+    "amenities": ["WiFi", "Gym", "Restaurant", "Room Service", "Concierge"],
+    "address": "321 5th Avenue, New York, NY"
+  },
+  {
+    "id": "HT005",
+    "name": "Times Square Suites",
+    "city": "New York",
+    "rating": 4.4,
+    "price_per_night": 279.99,
+    "amenities": ["WiFi", "Gym", "Kitchen", "City Views", "Laundry"],
+    "address": "555 Broadway, New York, NY"
+  },
+  {
+    "id": "HT006",
+    "name": "Brooklyn Budget Stay",
+    "city": "New York",
+    "rating": 3.8,
+    "price_per_night": 129.99,
+    "amenities": ["WiFi", "Shared Kitchen", "Parking"],
+    "address": "888 Brooklyn Ave, New York, NY"
+  },
+  {
+    "id": "HT007",
+    "name": "Miami Beach Paradise",
+    "city": "Miami",
+    "rating": 4.7,
+    "price_per_night": 329.99,
+    "amenities": ["WiFi", "Beach Access", "Pool", "Spa", "Restaurant", "Bar", "Water Sports"],
+    "address": "100 Ocean Blvd, Miami, FL"
+  },
+  {
+    "id": "HT008",
+    "name": "Art Deco Hotel",
+    "city": "Miami",
+    "rating": 4.3,
+    "price_per_night": 189.99,
+    "amenities": ["WiFi", "Pool", "Restaurant", "Rooftop Bar", "Parking"],
+    "address": "200 Collins Ave, Miami, FL"
+  },
+  {
+    "id": "HT009",
+    "name": "Golden Gate Hotel",
+    "city": "San Francisco",
+    "rating": 4.5,
+    "price_per_night": 259.99,
+    "amenities": ["WiFi", "Restaurant", "Gym", "City Views", "Valet Parking"],
+    "address": "400 Market St, San Francisco, CA"
+  },
+  {
+    "id": "HT010",
+    "name": "Bay View Inn",
+    "city": "San Francisco",
+    "rating": 4.2,
+    "price_per_night": 179.99,
+    "amenities": ["WiFi", "Bay Views", "Continental Breakfast", "Parking"],
+    "address": "600 Embarcadero, San Francisco, CA"
+  },
+  {
+    "id": "HT011",
+    "name": "Space Needle Suites",
+    "city": "Seattle",
+    "rating": 4.6,
+    "price_per_night": 219.99,
+    "amenities": ["WiFi", "Kitchen", "City Views", "Gym", "Business Center"],
+    "address": "300 Pike St, Seattle, WA"
+  },
+  {
+    "id": "HT012",
+    "name": "Pike Place Hotel",
+    "city": "Seattle",
+    "rating": 4.4,
+    "price_per_night": 189.99,
+    "amenities": ["WiFi", "Restaurant", "Market Views", "Coffee Bar"],
+    "address": "500 1st Ave, Seattle, WA"
+  },
+  {
+    "id": "HT013",
+    "name": "Lakefront Lodge",
+    "city": "Chicago",
+    "rating": 4.5,
+    "price_per_night": 199.99,
+    "amenities": ["WiFi", "Lake Views", "Restaurant", "Gym", "Parking"],
+    "address": "700 Lake Shore Dr, Chicago, IL"
+  },
+  {
+    "id": "HT014",
+    "name": "Magnificent Mile Hotel",
+    "city": "Chicago",
+    "rating": 4.7,
+    "price_per_night": 239.99,
+    "amenities": ["WiFi", "Pool", "Spa", "Restaurant", "Shopping Access", "Valet"],
+    "address": "900 Michigan Ave, Chicago, IL"
+  },
+  {
+    "id": "HT015",
+    "name": "Vegas Lights Casino Hotel",
+    "city": "Las Vegas",
+    "rating": 4.8,
+    "price_per_night": 179.99,
+    "amenities": ["WiFi", "Casino", "Pool", "Multiple Restaurants", "Show Tickets", "Spa"],
+    "address": "100 Las Vegas Blvd, Las Vegas, NV"
+  },
+  {
+    "id": "HT016",
+    "name": "Desert Oasis Resort",
+    "city": "Las Vegas",
+    "rating": 4.6,
+    "price_per_night": 149.99,
+    "amenities": ["WiFi", "Pool", "Casino", "Restaurant", "Bar", "Entertainment"],
+    "address": "200 Strip Ave, Las Vegas, NV"
+  },
+  {
+    "id": "HT017",
+    "name": "Harbor View Hotel",
+    "city": "Boston",
+    "rating": 4.4,
+    "price_per_night": 229.99,
+    "amenities": ["WiFi", "Harbor Views", "Restaurant", "Gym", "Business Center"],
+    "address": "400 Atlantic Ave, Boston, MA"
+  },
+  {
+    "id": "HT018",
+    "name": "Historic Boston Inn",
+    "city": "Boston",
+    "rating": 4.2,
+    "price_per_night": 169.99,
+    "amenities": ["WiFi", "Continental Breakfast", "Historic Architecture", "Parking"],
+    "address": "600 Beacon St, Boston, MA"
+  }
+]

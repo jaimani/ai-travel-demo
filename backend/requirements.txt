@@ -1,0 +1,9 @@
+fastapi==0.115.5
+uvicorn==0.32.1
+openai>=2.9.0
+openai-agents==0.6.3
+sqlmodel==0.0.22
+python-dotenv==1.0.1
+pydantic>=2.12.3
+pytest==8.3.4
+httpx==0.28.1

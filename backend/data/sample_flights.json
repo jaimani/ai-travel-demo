@@ -1,0 +1,156 @@
+[
+  {
+    "id": "FL001",
+    "airline": "Sky Airways",
+    "origin": "New York",
+    "destination": "Los Angeles",
+    "departure_time": "2025-01-15T08:00:00",
+    "arrival_time": "2025-01-15T11:30:00",
+    "price": 299.99,
+    "duration": "5h 30m",
+    "stops": 0
+  },
+  {
+    "id": "FL002",
+    "airline": "Ocean Air",
+    "origin": "New York",
+    "destination": "Los Angeles",
+    "departure_time": "2025-01-15T14:00:00",
+    "arrival_time": "2025-01-15T17:45:00",
+    "price": 249.99,
+    "duration": "5h 45m",
+    "stops": 0
+  },
+  {
+    "id": "FL003",
+    "airline": "Budget Airlines",
+    "origin": "New York",
+    "destination": "Los Angeles",
+    "departure_time": "2025-01-15T06:30:00",
+    "arrival_time": "2025-01-15T13:00:00",
+    "price": 179.99,
+    "duration": "6h 30m",
+    "stops": 1
+  },
+  {
+    "id": "FL004",
+    "airline": "Sky Airways",
+    "origin": "Los Angeles",
+    "destination": "New York",
+    "departure_time": "2025-01-22T09:00:00",
+    "arrival_time": "2025-01-22T17:15:00",
+    "price": 319.99,
+    "duration": "5h 15m",
+    "stops": 0
+  },
+  {
+    "id": "FL005",
+    "airline": "Ocean Air",
+    "origin": "Los Angeles",
+    "destination": "New York",
+    "departure_time": "2025-01-22T15:00:00",
+    "arrival_time": "2025-01-22T23:30:00",
+    "price": 269.99,
+    "duration": "5h 30m",
+    "stops": 0
+  },
+  {
+    "id": "FL006",
+    "airline": "Sky Airways",
+    "origin": "San Francisco",
+    "destination": "Miami",
+    "departure_time": "2025-02-01T07:00:00",
+    "arrival_time": "2025-02-01T15:30:00",
+    "price": 399.99,
+    "duration": "5h 30m",
+    "stops": 0
+  },
+  {
+    "id": "FL007",
+    "airline": "Miami Express",
+    "origin": "San Francisco",
+    "destination": "Miami",
+    "departure_time": "2025-02-01T11:00:00",
+    "arrival_time": "2025-02-01T19:45:00",
+    "price": 349.99,
+    "duration": "5h 45m",
+    "stops": 0
+  },
+  {
+    "id": "FL008",
+    "airline": "Sky Airways",
+    "origin": "Miami",
+    "destination": "San Francisco",
+    "departure_time": "2025-02-08T08:30:00",
+    "arrival_time": "2025-02-08T11:45:00",
+    "price": 419.99,
+    "duration": "6h 15m",
+    "stops": 0
+  },
+  {
+    "id": "FL009",
+    "airline": "Global Wings",
+    "origin": "Chicago",
+    "destination": "Seattle",
+    "departure_time": "2025-03-10T10:00:00",
+    "arrival_time": "2025-03-10T12:30:00",
+    "price": 279.99,
+    "duration": "4h 30m",
+    "stops": 0
+  },
+  {
+    "id": "FL010",
+    "airline": "Pacific Air",
+    "origin": "Chicago",
+    "destination": "Seattle",
+    "departure_time": "2025-03-10T16:00:00",
+    "arrival_time": "2025-03-10T18:45:00",
+    "price": 229.99,
+    "duration": "4h 45m",
+    "stops": 0
+  },
+  {
+    "id": "FL011",
+    "airline": "Global Wings",
+    "origin": "Seattle",
+    "destination": "Chicago",
+    "departure_time": "2025-03-17T09:00:00",
+    "arrival_time": "2025-03-17T15:00:00",
+    "price": 299.99,
+    "duration": "4h 0m",
+    "stops": 0
+  },
+  {
+    "id": "FL012",
+    "airline": "Sky Airways",
+    "origin": "Boston",
+    "destination": "Las Vegas",
+    "departure_time": "2025-04-05T07:30:00",
+    "arrival_time": "2025-04-05T10:45:00",
+    "price": 359.99,
+    "duration": "5h 15m",
+    "stops": 0
+  },
+  {
+    "id": "FL013",
+    "airline": "Vegas Express",
+    "origin": "Boston",
+    "destination": "Las Vegas",
+    "departure_time": "2025-04-05T13:00:00",
+    "arrival_time": "2025-04-05T16:30:00",
+    "price": 319.99,
+    "duration": "5h 30m",
+    "stops": 0
+  },
+  {
+    "id": "FL014",
+    "airline": "Sky Airways",
+    "origin": "Las Vegas",
+    "destination": "Boston",
+    "departure_time": "2025-04-12T11:00:00",
+    "arrival_time": "2025-04-12T19:15:00",
+    "price": 379.99,
+    "duration": "5h 15m",
+    "stops": 0
+  }
+]

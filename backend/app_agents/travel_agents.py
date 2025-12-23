@@ -1,0 +1,303 @@
+import os
+import sys
+import json
+from typing import Any
+
+# Ensure site-packages is checked before local modules for 'agents' import
+site_packages = '/usr/local/lib/python3.11/site-packages'
+if site_packages not in sys.path:
+    sys.path.insert(0, site_packages)
+
+from openai import OpenAI
+from agents import Agent, Runner, function_tool, RunHooks
+from tools.flights_tool import search_flights
+from tools.hotels_tool import search_hotels
+
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Define tool functions that agents can use with proper decorator
+@function_tool
+def search_flights_tool(origin: str, destination: str, departure_date: str, return_date: str = None) -> str:
+    """
+    Search for available flights.
+
+    Args:
+        origin: Departure city
+        destination: Arrival city
+        departure_date: Departure date in YYYY-MM-DD format
+        return_date: Return date in YYYY-MM-DD format (optional)
+
+    Returns:
+        JSON string with flight details
+    """
+    results = search_flights(origin, destination, departure_date, return_date)
+    return json.dumps(results, indent=2)
+
+@function_tool
+def search_hotels_tool(city: str, checkin_date: str, checkout_date: str, max_price: float = None) -> str:
+    """
+    Search for available hotels.
+
+    Args:
+        city: City name
+        checkin_date: Check-in date in YYYY-MM-DD format
+        checkout_date: Check-out date in YYYY-MM-DD format
+        max_price: Maximum price per night (optional)
+
+    Returns:
+        JSON string with hotel details
+    """
+    results = search_hotels(city, checkin_date, checkout_date, max_price)
+    return json.dumps(results, indent=2)
+
+# Flights Agent
+flights_agent = Agent(
+    name="FlightsAgent",
+    instructions="""You are a flights specialist. Your job is to search for the best flight options.
+
+    When given travel requirements:
+    1. Search for flights using the search_flights_tool
+    2. Analyze the results and recommend the best options based on:
+       - Price (lower is better)
+       - Duration (shorter is better)
+       - Number of stops (fewer is better)
+       - Departure times (convenient times preferred)
+    3. Present 2-3 best flight options with clear reasoning
+    4. Always include both outbound and return flight options if it's a round trip
+
+    Be concise and helpful in your recommendations.""",
+    tools=[search_flights_tool],
+    model="gpt-5-mini"
+)
+
+# Hotels Agent
+hotels_agent = Agent(
+    name="HotelsAgent",
+    instructions="""You are a hotels specialist. Your job is to find the best hotel accommodations.
+
+    When given accommodation requirements:
+    1. Search for hotels using the search_hotels_tool
+    2. Consider the budget and filter appropriately
+    3. Recommend hotels based on:
+       - Rating (higher is better)
+       - Price (within budget)
+       - Amenities (more is better)
+       - Location
+    4. Present 2-3 best hotel options with clear reasoning
+    5. Mention the total cost for the stay
+
+    Be helpful and consider the traveler's budget.""",
+    tools=[search_hotels_tool],
+    model="gpt-5-mini"
+)
+
+# Itinerary Agent
+itinerary_agent = Agent(
+    name="ItineraryAgent",
+    instructions="""You are an itinerary specialist. Your job is to create comprehensive travel summaries.
+
+    When given flight and hotel information:
+    1. Summarize the complete travel plan
+    2. Calculate total costs
+    3. Provide a day-by-day overview
+    4. Mention important details like:
+       - Check-in/check-out times
+       - Flight departure/arrival times
+       - Total trip cost
+       - Hotel amenities
+    5. Give helpful travel tips
+
+    Present the information in a clear, organized format.""",
+    model="gpt-5-mini"
+)
+
+# Main Planner Agent (orchestrator) - defined after other agents so it can reference them
+planner_agent = Agent(
+    name="PlannerAgent",
+    instructions="""You are the main travel planning coordinator for Llama Inc. Travel Agency.
+
+    Your role is to:
+    1. Understand the customer's travel requirements (origin, destination, dates, budget, passengers)
+    2. Delegate to specialized agents **in order**:
+       - First, hand off to FlightsAgent to search for flights and wait for its completion.
+       - Next, hand off to HotelsAgent to search for hotels and wait for its completion.
+       - Finally, hand off to ItineraryAgent to create the final summary using both results.
+       Never skip the HotelsAgent hand-off, even if flight options look sufficient.
+    3. Ensure all requirements are met within budget
+    4. Provide a complete travel plan
+
+    Always be professional, friendly, and focused on finding the best value for the customer.
+    Start by confirming the travel requirements, then delegate to the appropriate agents.""",
+    handoffs=[flights_agent, hotels_agent, itinerary_agent],  # Pass actual agent objects
+    model="gpt-5-mini"
+)
+
+# Agent registry
+agents = {
+    "PlannerAgent": planner_agent,
+    "FlightsAgent": flights_agent,
+    "HotelsAgent": hotels_agent,
+    "ItineraryAgent": itinerary_agent
+}
+
+def run_travel_planning(user_request: str) -> dict:
+    """
+    Run the travel planning workflow sequentially through all agents.
+
+    Args:
+        user_request: The user's travel request as a string
+
+    Returns:
+        Dictionary containing the planning results
+    """
+    workflow_steps: list[dict[str, Any]] = []
+    collected_messages: list[dict[str, str]] = []
+
+    class LoggingHooks(RunHooks):
+        """Hooks to capture agent workflow for display."""
+
+        @staticmethod
+        def _get_arg(args, kwargs, name, index=None):
+            if name in kwargs:
+                return kwargs[name]
+            if index is not None and len(args) > index:
+                return args[index]
+            return None
+
+        async def on_agent_start(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            if not agent:
+                return
+            workflow_steps.append({
+                'type': 'agent_start',
+                'agent': agent.name,
+                'message': f"🤖 {agent.name} is starting..."
+            })
+
+        async def on_agent_end(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            if not agent:
+                return
+            workflow_steps.append({
+                'type': 'agent_end',
+                'agent': agent.name,
+                'message': f"✓ {agent.name} completed"
+            })
+
+        async def on_tool_start(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            tool = self._get_arg(args, kwargs, 'tool', 2)
+            if not agent:
+                return
+            tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
+            workflow_steps.append({
+                'type': 'tool_call',
+                'agent': agent.name,
+                'tool': tool_name,
+                'message': f"🔧 {agent.name} is calling {tool_name}"
+            })
+
+        async def on_llm_start(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            if not agent:
+                return
+            model_name = getattr(agent, 'model', 'OpenAI model')
+            workflow_steps.append({
+                'type': 'llm_call',
+                'agent': agent.name,
+                'message': f"💬 {agent.name} is calling LLM ({model_name})"
+            })
+
+    def extract_messages(agent_result) -> tuple[str, list[dict[str, str]]]:
+        final_output = getattr(agent_result, 'final_output', None)
+        messages = []
+        if hasattr(agent_result, 'messages'):
+            for message in agent_result.messages:
+                if hasattr(message, 'content'):
+                    content = message.content
+                    if isinstance(content, list):
+                        for block in content:
+                            if hasattr(block, 'text'):
+                                messages.append({
+                                    'role': getattr(message, 'role', 'assistant'),
+                                    'content': block.text
+                                })
+                    else:
+                        messages.append({
+                            'role': getattr(message, 'role', 'assistant'),
+                            'content': str(content)
+                        })
+        response_text = final_output if final_output else (messages[-1]['content'] if messages else "No response generated")
+        return response_text, messages
+
+    def run_agent(agent: Agent, prompt: str) -> str:
+        result = Runner.run_sync(
+            starting_agent=agent,
+            input=prompt,
+            max_turns=10,
+            hooks=LoggingHooks()
+        )
+        response_text, messages = extract_messages(result)
+        collected_messages.extend(messages)
+        return response_text
+
+    try:
+        # Planner gathers requirements/strategy
+        planner_summary = run_agent(planner_agent, user_request)
+
+        def add_handoff(from_agent: str, to_agent: str):
+            workflow_steps.append({
+                'type': 'handoff',
+                'from': from_agent,
+                'to': to_agent,
+                'message': f"➡️  Handing off from {from_agent} to {to_agent}"
+            })
+
+        add_handoff('PlannerAgent', 'FlightsAgent')
+        flights_summary = run_agent(flights_agent, user_request)
+
+        add_handoff('FlightsAgent', 'HotelsAgent')
+        hotels_summary = run_agent(hotels_agent, user_request)
+
+        # Provide context from earlier steps to itinerary agent
+        itinerary_prompt = f"""
+        The traveler shared the following request:
+        {user_request}
+
+        Flights specialist summary:
+        {flights_summary}
+
+        Hotels specialist summary:
+        {hotels_summary}
+
+        Planner notes:
+        {planner_summary}
+
+        Please craft a polished final travel recommendation that:
+        - Presents the best outbound and return flight options
+        - Highlights 2-3 hotel choices with key amenities
+        - Mentions approximate combined cost against the user's budget
+        - Provides any helpful travel tips or next steps
+
+        Format the response in Markdown.
+        """
+
+        add_handoff('HotelsAgent', 'ItineraryAgent')
+        final_summary = run_agent(itinerary_agent, itinerary_prompt)
+
+        return {
+            'success': True,
+            'messages': collected_messages,
+            'final_response': final_summary,
+            'workflow_steps': workflow_steps
+        }
+    except Exception as e:
+        import traceback
+        return {
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc(),
+            'messages': collected_messages,
+            'workflow_steps': workflow_steps
+        }
