@@ -7,6 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 120000, // 2 minute timeout for AI agent processing
 });
 
 // Plan a trip using AI agents
@@ -83,6 +84,38 @@ export const getBookings = async () => {
 export const getBooking = async (bookingId) => {
   try {
     const response = await api.get(`/bookings/${bookingId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Multi-City API Functions
+
+// Search flights for multiple legs
+export const searchMultiLegFlights = async (searchParams) => {
+  try {
+    const response = await api.post('/flights/search_multi', searchParams);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Search hotels for multiple cities
+export const searchMultiCityHotels = async (searchParams) => {
+  try {
+    const response = await api.post('/hotels/search_multi', searchParams);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error.message;
+  }
+};
+
+// Create multi-city booking
+export const createMultiCityBooking = async (bookingData) => {
+  try {
+    const response = await api.post('/bookings/multi_city', bookingData);
     return response.data;
   } catch (error) {
     throw error.response?.data || error.message;

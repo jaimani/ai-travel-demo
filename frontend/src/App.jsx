@@ -4,15 +4,30 @@ import TripPlanner from './components/TripPlanner';
 import FlightsList from './components/FlightsList';
 import HotelsList from './components/HotelsList';
 import BookingSummary from './components/BookingSummary';
+import MultiCityFlightsList from './components/MultiCityFlightsList';
+import MultiCityHotelsList from './components/MultiCityHotelsList';
+import MultiCityBookingSummary from './components/MultiCityBookingSummary';
 import './App.css';
 
 function App() {
+  // Trip type state
+  const [tripType, setTripType] = useState('single');
+
+  // Single-city state
   const [flights, setFlights] = useState([]);
   const [hotels, setHotels] = useState([]);
-  const [tripPlan, setTripPlan] = useState(null);
-  const [workflowSteps, setWorkflowSteps] = useState([]);
   const [selectedFlight, setSelectedFlight] = useState(null);
   const [selectedHotel, setSelectedHotel] = useState(null);
+
+  // Multi-city state
+  const [multiCityFlights, setMultiCityFlights] = useState({});
+  const [multiCityHotels, setMultiCityHotels] = useState({});
+  const [selectedFlightsPerLeg, setSelectedFlightsPerLeg] = useState({});
+  const [selectedHotelsPerCity, setSelectedHotelsPerCity] = useState({});
+
+  // Shared state
+  const [tripPlan, setTripPlan] = useState(null);
+  const [workflowSteps, setWorkflowSteps] = useState([]);
   const [tripDetails, setTripDetails] = useState(null);
   const [showToolDetails, setShowToolDetails] = useState(false);
   const [isWorkflowExpanded, setIsWorkflowExpanded] = useState(false);
@@ -22,53 +37,100 @@ function App() {
   const handleTripPlanned = (plan, details, steps) => {
     setTripPlan(plan);
     setTripDetails(details);
+    setTripType(details.tripType || 'single');
     setWorkflowSteps(steps || []);
   };
 
   const handleFlightsFound = (foundFlights) => {
-    setFlights(foundFlights);
-    if (foundFlights && foundFlights.length > 0) {
-      const bestFlight = [...foundFlights].sort((a, b) => a.price - b.price)[0];
-      setRecommendedFlightId(bestFlight.id);
+    if (Array.isArray(foundFlights)) {
+      // Single-city flights (array)
+      setFlights(foundFlights);
+      if (foundFlights.length > 0) {
+        const bestFlight = [...foundFlights].sort((a, b) => a.price - b.price)[0];
+        setRecommendedFlightId(bestFlight.id);
+      } else {
+        setRecommendedFlightId(null);
+      }
     } else {
-      setRecommendedFlightId(null);
+      // Multi-city flights (object)
+      setMultiCityFlights(foundFlights);
     }
   };
 
   const handleHotelsFound = (foundHotels) => {
-    setHotels(foundHotels);
-    if (foundHotels && foundHotels.length > 0) {
-      const bestHotel = [...foundHotels].sort((a, b) => {
-        if (b.rating === a.rating) {
-          return a.price_per_night - b.price_per_night;
-        }
-        return b.rating - a.rating;
-      })[0];
-      setRecommendedHotelId(bestHotel.id);
+    if (Array.isArray(foundHotels)) {
+      // Single-city hotels (array)
+      setHotels(foundHotels);
+      if (foundHotels.length > 0) {
+        const bestHotel = [...foundHotels].sort((a, b) => {
+          if (b.rating === a.rating) {
+            return a.price_per_night - b.price_per_night;
+          }
+          return b.rating - a.rating;
+        })[0];
+        setRecommendedHotelId(bestHotel.id);
+      } else {
+        setRecommendedHotelId(null);
+      }
     } else {
-      setRecommendedHotelId(null);
+      // Multi-city hotels (object)
+      setMultiCityHotels(foundHotels);
     }
   };
 
-  const handleFlightSelected = (flight) => {
-    setSelectedFlight(flight);
+  const handleFlightSelected = (flightOrLegKey, flight) => {
+    if (tripType === 'single') {
+      setSelectedFlight(flightOrLegKey); // flightOrLegKey is the flight object
+    } else {
+      // Multi-city: flightOrLegKey is legKey, flight is flight object
+      setSelectedFlightsPerLeg(prev => ({
+        ...prev,
+        [flightOrLegKey]: flight
+      }));
+    }
   };
 
-  const handleHotelSelected = (hotel) => {
-    setSelectedHotel(hotel);
+  const handleHotelSelected = (hotelOrCity, hotel) => {
+    if (tripType === 'single') {
+      setSelectedHotel(hotelOrCity); // hotelOrCity is the hotel object
+    } else {
+      // Multi-city: hotelOrCity is city name, hotel is hotel object
+      setSelectedHotelsPerCity(prev => ({
+        ...prev,
+        [hotelOrCity]: hotel
+      }));
+    }
   };
 
   const handleBookingComplete = () => {
     // Reset the app after booking
     setFlights([]);
     setHotels([]);
+    setMultiCityFlights({});
+    setMultiCityHotels({});
     setTripPlan(null);
     setWorkflowSteps([]);
     setSelectedFlight(null);
     setSelectedHotel(null);
+    setSelectedFlightsPerLeg({});
+    setSelectedHotelsPerCity({});
     setTripDetails(null);
     setRecommendedFlightId(null);
     setRecommendedHotelId(null);
+    setTripType('single');
+  };
+
+  // Helper to check if all multi-city selections are complete
+  const isMultiCityComplete = () => {
+    if (tripType !== 'multi' || !tripDetails || !tripDetails.cities) return false;
+
+    const numLegs = tripDetails.cities.length;
+    const numHotels = tripDetails.cities.length - 1; // Excluding origin
+
+    return (
+      Object.keys(selectedFlightsPerLeg).length === numLegs &&
+      Object.keys(selectedHotelsPerCity).length === numHotels
+    );
   };
 
   const recommendedFlight = flights.find((flight) => flight.id === recommendedFlightId);
@@ -166,31 +228,62 @@ function App() {
             </div>
           )}
 
-          {flights.length > 0 && (
-            <FlightsList
-              flights={flights}
-              onFlightSelected={handleFlightSelected}
-              selectedFlight={selectedFlight}
-              recommendedFlightId={recommendedFlightId}
-            />
-          )}
+          {tripType === 'single' ? (
+            <>
+              {flights.length > 0 && (
+                <FlightsList
+                  flights={flights}
+                  onFlightSelected={handleFlightSelected}
+                  selectedFlight={selectedFlight}
+                  recommendedFlightId={recommendedFlightId}
+                />
+              )}
 
-          {hotels.length > 0 && (
-            <HotelsList
-              hotels={hotels}
-              onHotelSelected={handleHotelSelected}
-              selectedHotel={selectedHotel}
-              recommendedHotelId={recommendedHotelId}
-            />
-          )}
+              {hotels.length > 0 && (
+                <HotelsList
+                  hotels={hotels}
+                  onHotelSelected={handleHotelSelected}
+                  selectedHotel={selectedHotel}
+                  recommendedHotelId={recommendedHotelId}
+                />
+              )}
 
-          {selectedFlight && selectedHotel && tripDetails && (
-            <BookingSummary
-              flight={selectedFlight}
-              hotel={selectedHotel}
-              tripDetails={tripDetails}
-              onBookingComplete={handleBookingComplete}
-            />
+              {selectedFlight && selectedHotel && tripDetails && (
+                <BookingSummary
+                  flight={selectedFlight}
+                  hotel={selectedHotel}
+                  tripDetails={tripDetails}
+                  onBookingComplete={handleBookingComplete}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              {Object.keys(multiCityFlights).length > 0 && (
+                <MultiCityFlightsList
+                  flightsByLeg={multiCityFlights}
+                  onFlightSelected={handleFlightSelected}
+                  selectedFlights={selectedFlightsPerLeg}
+                />
+              )}
+
+              {Object.keys(multiCityHotels).length > 0 && (
+                <MultiCityHotelsList
+                  hotelsByCity={multiCityHotels}
+                  onHotelSelected={handleHotelSelected}
+                  selectedHotels={selectedHotelsPerCity}
+                />
+              )}
+
+              {isMultiCityComplete() && tripDetails && (
+                <MultiCityBookingSummary
+                  selectedFlights={selectedFlightsPerLeg}
+                  selectedHotels={selectedHotelsPerCity}
+                  tripDetails={tripDetails}
+                  onBookingComplete={handleBookingComplete}
+                />
+              )}
+            </>
           )}
         </div>
       </main>
