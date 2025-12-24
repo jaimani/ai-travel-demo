@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from typing import Any
+from typing import Any, Callable, Optional
 
 # Ensure site-packages is checked before local modules for 'agents' import
 site_packages = '/usr/local/lib/python3.11/site-packages'
@@ -167,7 +167,7 @@ agents = {
     "ItineraryAgent": itinerary_agent
 }
 
-def run_travel_planning(user_request: str) -> dict:
+def run_travel_planning(user_request: str, progress_callback: Optional[Callable[[dict], None]] = None) -> dict:
     """
     Run the travel planning workflow sequentially through all agents (SINGLE-CITY trips).
 
@@ -178,6 +178,16 @@ def run_travel_planning(user_request: str) -> dict:
         Dictionary containing the planning results
     """
     workflow_steps: list[dict[str, Any]] = []
+
+    def record_step(step: dict[str, Any]) -> None:
+        """Store the workflow step locally and optionally emit it to listeners."""
+        workflow_steps.append(step)
+        if progress_callback:
+            try:
+                progress_callback(step)
+            except Exception:
+                # Don't let streaming callback failures break planning
+                pass
     collected_messages: list[dict[str, str]] = []
 
     class LoggingHooks(RunHooks):
@@ -195,7 +205,7 @@ def run_travel_planning(user_request: str) -> dict:
             agent = self._get_arg(args, kwargs, 'agent', 1)
             if not agent:
                 return
-            workflow_steps.append({
+            record_step({
                 'type': 'agent_start',
                 'agent': agent.name,
                 'message': f"🤖 {agent.name} is starting..."
@@ -205,7 +215,7 @@ def run_travel_planning(user_request: str) -> dict:
             agent = self._get_arg(args, kwargs, 'agent', 1)
             if not agent:
                 return
-            workflow_steps.append({
+            record_step({
                 'type': 'agent_end',
                 'agent': agent.name,
                 'message': f"✓ {agent.name} completed"
@@ -217,7 +227,7 @@ def run_travel_planning(user_request: str) -> dict:
             if not agent:
                 return
             tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
-            workflow_steps.append({
+            record_step({
                 'type': 'tool_call',
                 'agent': agent.name,
                 'tool': tool_name,
@@ -229,7 +239,7 @@ def run_travel_planning(user_request: str) -> dict:
             if not agent:
                 return
             model_name = getattr(agent, 'model', 'OpenAI model')
-            workflow_steps.append({
+            record_step({
                 'type': 'llm_call',
                 'agent': agent.name,
                 'message': f"💬 {agent.name} is calling LLM ({model_name})"
@@ -273,7 +283,7 @@ def run_travel_planning(user_request: str) -> dict:
         planner_summary = run_agent(planner_agent, user_request)
 
         def add_handoff(from_agent: str, to_agent: str):
-            workflow_steps.append({
+            record_step({
                 'type': 'handoff',
                 'from': from_agent,
                 'to': to_agent,
@@ -329,7 +339,12 @@ def run_travel_planning(user_request: str) -> dict:
             'workflow_steps': workflow_steps
         }
 
-def run_multi_city_planning(trip_legs: list[dict], budget: float, passengers: int) -> dict:
+def run_multi_city_planning(
+    trip_legs: list[dict],
+    budget: float,
+    passengers: int,
+    progress_callback: Optional[Callable[[dict], None]] = None
+) -> dict:
     """
     Run the travel planning workflow for MULTI-CITY trips.
 
@@ -342,6 +357,14 @@ def run_multi_city_planning(trip_legs: list[dict], budget: float, passengers: in
         Dictionary containing the planning results
     """
     workflow_steps: list[dict[str, Any]] = []
+
+    def record_step(step: dict[str, Any]) -> None:
+        workflow_steps.append(step)
+        if progress_callback:
+            try:
+                progress_callback(step)
+            except Exception:
+                pass
     collected_messages: list[dict[str, str]] = []
 
     class LoggingHooks(RunHooks):
@@ -359,7 +382,7 @@ def run_multi_city_planning(trip_legs: list[dict], budget: float, passengers: in
             agent = self._get_arg(args, kwargs, 'agent', 1)
             if not agent:
                 return
-            workflow_steps.append({
+            record_step({
                 'type': 'agent_start',
                 'agent': agent.name,
                 'message': f"🤖 {agent.name} is starting..."
@@ -369,7 +392,7 @@ def run_multi_city_planning(trip_legs: list[dict], budget: float, passengers: in
             agent = self._get_arg(args, kwargs, 'agent', 1)
             if not agent:
                 return
-            workflow_steps.append({
+            record_step({
                 'type': 'agent_end',
                 'agent': agent.name,
                 'message': f"✓ {agent.name} completed"
@@ -381,7 +404,7 @@ def run_multi_city_planning(trip_legs: list[dict], budget: float, passengers: in
             if not agent:
                 return
             tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
-            workflow_steps.append({
+            record_step({
                 'type': 'tool_call',
                 'agent': agent.name,
                 'tool': tool_name,
@@ -393,7 +416,7 @@ def run_multi_city_planning(trip_legs: list[dict], budget: float, passengers: in
             if not agent:
                 return
             model_name = getattr(agent, 'model', 'OpenAI model')
-            workflow_steps.append({
+            record_step({
                 'type': 'llm_call',
                 'agent': agent.name,
                 'message': f"💬 {agent.name} is calling LLM ({model_name})"
@@ -463,7 +486,7 @@ def run_multi_city_planning(trip_legs: list[dict], budget: float, passengers: in
         print(f"[DEBUG] Planner completed")
 
         def add_handoff(from_agent: str, to_agent: str):
-            workflow_steps.append({
+            record_step({
                 'type': 'handoff',
                 'from': from_agent,
                 'to': to_agent,

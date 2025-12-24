@@ -11,7 +11,7 @@ import './App.css';
 
 function App() {
   // Trip type state
-  const [tripType, setTripType] = useState('single');
+  const [tripType, setTripType] = useState('multi');
 
   // Single-city state
   const [flights, setFlights] = useState([]);
@@ -34,10 +34,19 @@ function App() {
   const [recommendedFlightId, setRecommendedFlightId] = useState(null);
   const [recommendedHotelId, setRecommendedHotelId] = useState(null);
 
+  const handleWorkflowReset = () => {
+    setWorkflowSteps([]);
+    setIsWorkflowExpanded(true);
+  };
+
+  const handleWorkflowStep = (step) => {
+    setWorkflowSteps(prev => [...prev, step]);
+  };
+
   const handleTripPlanned = (plan, details, steps) => {
     setTripPlan(plan);
     setTripDetails(details);
-    setTripType(details.tripType || 'single');
+    setTripType(details.tripType || 'multi');
     setWorkflowSteps(steps || []);
   };
 
@@ -117,7 +126,7 @@ function App() {
     setTripDetails(null);
     setRecommendedFlightId(null);
     setRecommendedHotelId(null);
-    setTripType('single');
+    setTripType('multi');
   };
 
   // Helper to check if all multi-city selections are complete
@@ -151,6 +160,8 @@ function App() {
             onTripPlanned={handleTripPlanned}
             onFlightsFound={handleFlightsFound}
             onHotelsFound={handleHotelsFound}
+            onWorkflowReset={handleWorkflowReset}
+            onWorkflowStep={handleWorkflowStep}
           />
 
           {workflowSteps.length > 0 && (

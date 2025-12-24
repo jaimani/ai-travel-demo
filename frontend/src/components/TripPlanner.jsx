@@ -1,20 +1,10 @@
 import React, { useState } from 'react';
-import { planTrip, searchFlights, searchHotels, searchMultiLegFlights, searchMultiCityHotels } from '../utils/api';
+import { planTrip, searchMultiLegFlights, searchMultiCityHotels } from '../utils/api';
 import './TripPlanner.css';
 
-function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound }) {
-  const [tripType, setTripType] = useState('single');
+const MAX_LEGS = 4;
 
-  // Single-city form data
-  const [formData, setFormData] = useState({
-    origin: '',
-    destination: '',
-    departure_date: '',
-    return_date: '',
-    budget: '',
-    passengers: 1
-  });
-
+function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowReset, onWorkflowStep }) {
   // Multi-city form data
   const [cities, setCities] = useState([
     { origin: '', destination: '', departure_date: '' }
@@ -25,17 +15,9 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
   // Multi-city helper functions
   const addCity = () => {
-    if (cities.length >= 4) return; // Max 4 legs (5 cities including return)
+    if (cities.length >= MAX_LEGS) return; // Max legs guard
 
     const lastCity = cities[cities.length - 1];
     setCities([...cities, {
@@ -88,96 +70,60 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound }) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    if (onWorkflowReset) {
+      onWorkflowReset();
+    }
     onFlightsFound([]);
     onHotelsFound([]);
 
     try {
-      let result;
+      if (!validateRoundTrip()) {
+        setLoading(false);
+        return;
+      }
 
-      if (tripType === 'single') {
-        // Single-city trip
-        result = await planTrip({
-          origin: formData.origin,
-          destination: formData.destination,
-          departure_date: formData.departure_date,
-          return_date: formData.return_date,
-          budget: parseFloat(formData.budget),
-          passengers: parseInt(formData.passengers)
-        });
+      const trip_legs = cities.map((leg, index) => ({
+        origin: leg.origin,
+        destination: leg.destination,
+        departure_date: leg.departure_date,
+        leg_number: index + 1
+      }));
 
-        if (result.success) {
-          onTripPlanned(result.final_response || result.plan, { tripType, ...formData }, result.workflow_steps);
+      const result = await planTrip({
+        trip_legs,
+        budget: parseFloat(budget),
+        passengers: parseInt(passengers),
+        trip_type: 'multi_city'
+      }, { onWorkflowStep });
 
-          try {
-            const [flightResults, hotelResults] = await Promise.all([
-              searchFlights({
-                origin: formData.origin,
-                destination: formData.destination,
-                departure_date: formData.departure_date,
-                return_date: formData.return_date
-              }),
-              searchHotels({
-                city: formData.destination,
-                checkin_date: formData.departure_date,
-                checkout_date: formData.return_date
-              })
-            ]);
+      if (result.success) {
+        onTripPlanned(
+          result.final_response || result.plan,
+          { tripType: 'multi', cities, budget, passengers },
+          result.workflow_steps
+        );
 
-            onFlightsFound(flightResults || []);
-            onHotelsFound(hotelResults || []);
-          } catch (searchErr) {
-            console.error('Error fetching booking options:', searchErr);
-            setError('Trip planned, but we could not load bookable flights or hotels. Please try again.');
-          }
-        } else {
-          setError(result.error || 'Failed to plan trip. Please try again.');
+        try {
+          // Search flights for each leg and hotels for each destination city (excluding origin)
+          const [flightResults, hotelResults] = await Promise.all([
+            searchMultiLegFlights({ legs: cities }),
+            searchMultiCityHotels({
+              cities: cities.slice(0, -1).map((leg, i) => ({
+                city: leg.destination,
+                checkin_date: leg.departure_date,
+                checkout_date: cities[i + 1].departure_date
+              }))
+            })
+          ]);
+
+          onFlightsFound(flightResults || {});
+          onHotelsFound(hotelResults || {});
+        } catch (searchErr) {
+          console.error('Error fetching booking options:', searchErr);
+          setError('Trip planned, but we could not load bookable flights or hotels. Please try again.');
         }
       } else {
-        // Multi-city trip
-        if (!validateRoundTrip()) {
-          setLoading(false);
-          return;
-        }
-
-        const trip_legs = cities.map((leg, index) => ({
-          origin: leg.origin,
-          destination: leg.destination,
-          departure_date: leg.departure_date,
-          leg_number: index + 1
-        }));
-
-        result = await planTrip({
-          trip_legs,
-          budget: parseFloat(budget),
-          passengers: parseInt(passengers),
-          trip_type: 'multi_city'
-        });
-
-        if (result.success) {
-          onTripPlanned(result.final_response || result.plan, { tripType, cities, budget, passengers }, result.workflow_steps);
-
-          try {
-            // Search flights for each leg and hotels for each destination city (excluding origin)
-            const [flightResults, hotelResults] = await Promise.all([
-              searchMultiLegFlights({ legs: cities }),
-              searchMultiCityHotels({
-                cities: cities.slice(0, -1).map((leg, i) => ({
-                  city: leg.destination,
-                  checkin_date: leg.departure_date,
-                  checkout_date: cities[i + 1].departure_date
-                }))
-              })
-            ]);
-
-            onFlightsFound(flightResults || {});
-            onHotelsFound(hotelResults || {});
-          } catch (searchErr) {
-            console.error('Error fetching booking options:', searchErr);
-            setError('Trip planned, but we could not load bookable flights or hotels. Please try again.');
-          }
-        } else {
-          setError(result.error || 'Failed to plan trip. Please try again.');
-        }
+        setError(result.error || 'Failed to plan trip. Please try again.');
       }
     } catch (err) {
       console.error('Error planning trip:', err);
@@ -191,209 +137,99 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound }) {
     <div className="trip-planner card">
       <h2>Plan Your Trip</h2>
 
-      <div className="trip-type-selector">
-        <label className="radio-label">
-          <input
-            type="radio"
-            value="single"
-            checked={tripType === 'single'}
-            onChange={(e) => setTripType(e.target.value)}
-          />
-          Round Trip (Single City)
-        </label>
-        <label className="radio-label">
-          <input
-            type="radio"
-            value="multi"
-            checked={tripType === 'multi'}
-            onChange={(e) => setTripType(e.target.value)}
-          />
-          Multi-City Trip
-        </label>
-      </div>
-
       <form onSubmit={handleSubmit}>
-        {tripType === 'single' ? (
-          // Single-city form
-          <>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="origin">From</label>
-                <input
-                  type="text"
-                  id="origin"
-                  name="origin"
-                  value={formData.origin}
-                  onChange={handleChange}
-                  placeholder="e.g., New York"
-                  required
-                />
+        <div className="multi-city-legs">
+          {cities.map((leg, index) => (
+            <div key={index} className="city-leg">
+              <div className="leg-header">
+                <h4>Leg {index + 1}</h4>
+                {cities.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeCity(index)}
+                    className="btn-remove"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
 
-              <div className="form-group">
-                <label htmlFor="destination">To</label>
-                <input
-                  type="text"
-                  id="destination"
-                  name="destination"
-                  value={formData.destination}
-                  onChange={handleChange}
-                  placeholder="e.g., Los Angeles"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="departure_date">Departure Date</label>
-                <input
-                  type="date"
-                  id="departure_date"
-                  name="departure_date"
-                  value={formData.departure_date}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="return_date">Return Date</label>
-                <input
-                  type="date"
-                  id="return_date"
-                  name="return_date"
-                  value={formData.return_date}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="budget">Budget ($)</label>
-                <input
-                  type="number"
-                  id="budget"
-                  name="budget"
-                  value={formData.budget}
-                  onChange={handleChange}
-                  placeholder="e.g., 2000"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="passengers">Passengers</label>
-                <input
-                  type="number"
-                  id="passengers"
-                  name="passengers"
-                  value={formData.passengers}
-                  onChange={handleChange}
-                  min="1"
-                  max="10"
-                  required
-                />
-              </div>
-            </div>
-          </>
-        ) : (
-          // Multi-city form
-          <>
-            <div className="multi-city-legs">
-              {cities.map((leg, index) => (
-                <div key={index} className="city-leg">
-                  <div className="leg-header">
-                    <h4>Leg {index + 1}</h4>
-                    {cities.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeCity(index)}
-                        className="btn-remove"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>From</label>
-                      <input
-                        type="text"
-                        value={leg.origin}
-                        onChange={(e) => updateCity(index, 'origin', e.target.value)}
-                        placeholder="e.g., New York"
-                        required
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>To</label>
-                      <input
-                        type="text"
-                        value={leg.destination}
-                        onChange={(e) => updateCity(index, 'destination', e.target.value)}
-                        placeholder="e.g., Los Angeles"
-                        required
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Departure Date</label>
-                      <input
-                        type="date"
-                        value={leg.departure_date}
-                        onChange={(e) => updateCity(index, 'departure_date', e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>From</label>
+                  <input
+                    type="text"
+                    value={leg.origin}
+                    onChange={(e) => updateCity(index, 'origin', e.target.value)}
+                    placeholder={index === 0 ? 'e.g., New York' : 'Previous destination'}
+                    required
+                  />
                 </div>
-              ))}
-            </div>
 
-            {cities.length < 4 && (
-              <button
-                type="button"
-                onClick={addCity}
-                className="btn-add-city"
-              >
-                + Add Another City
-              </button>
-            )}
-
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="multi-budget">Budget ($)</label>
-                <input
-                  type="number"
-                  id="multi-budget"
-                  value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
-                  placeholder="e.g., 3000"
-                  min="0"
-                  step="0.01"
-                  required
-                />
+                <div className="form-group">
+                  <label>To</label>
+                  <input
+                    type="text"
+                    value={leg.destination}
+                    onChange={(e) => updateCity(index, 'destination', e.target.value)}
+                    placeholder="e.g., Los Angeles"
+                    required
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="multi-passengers">Passengers</label>
-                <input
-                  type="number"
-                  id="multi-passengers"
-                  value={passengers}
-                  onChange={(e) => setPassengers(e.target.value)}
-                  min="1"
-                  max="10"
-                  required
-                />
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Departure Date</label>
+                  <input
+                    type="date"
+                    value={leg.departure_date}
+                    onChange={(e) => updateCity(index, 'departure_date', e.target.value)}
+                    required
+                  />
+                </div>
               </div>
             </div>
-          </>
-        )}
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={addCity}
+          className="btn-add-city premium"
+          disabled={cities.length >= MAX_LEGS}
+        >
+          👑 + Add Another City
+        </button>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="multi-budget">Budget ($)</label>
+            <input
+              type="number"
+              id="multi-budget"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="e.g., 3000"
+              min="0"
+              step="0.01"
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="multi-passengers">Passengers</label>
+            <input
+              type="number"
+              id="multi-passengers"
+              value={passengers}
+              onChange={(e) => setPassengers(e.target.value)}
+              min="1"
+              max="10"
+              required
+            />
+          </div>
+        </div>
 
         {error && (
           <div className="error-message">

@@ -1,9 +1,11 @@
 import os
+import asyncio
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from dotenv import load_dotenv
-from typing import List, Union
+from typing import List, Union, Any, Optional, Callable
 import json
 
 from models.database import (
@@ -63,14 +65,22 @@ def read_root():
 def health_check():
     return {"status": "healthy"}
 
-# Planner endpoint - Uses OpenAI Agents SDK
-@app.post("/planner/plan_trip")
-def plan_trip(request: dict):
+def _format_trip_prompt(validated_request: TripPlanRequest) -> str:
+    return f"""
+    I need to plan a trip with the following details:
+    - Origin: {validated_request.origin}
+    - Destination: {validated_request.destination}
+    - Departure Date: {validated_request.departure_date}
+    - Return Date: {validated_request.return_date}
+    - Budget: ${validated_request.budget}
+    - Number of Passengers: {validated_request.passengers}
+
+    Please search for flights and hotels that fit within my budget and provide recommendations.
     """
-    Plan a complete trip using AI agents (supports both single-city and multi-city trips).
-    This endpoint orchestrates multiple agents to search flights, hotels, and create an itinerary.
-    """
-    # Validate OpenAI API key
+
+
+def _execute_trip_planning(request: dict, progress_callback: Optional[Callable[[dict], None]] = None) -> dict:
+    """Shared logic for running the multi-agent planning workflow."""
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(
             status_code=500,
@@ -78,11 +88,8 @@ def plan_trip(request: dict):
         )
 
     try:
-        # Determine trip type based on presence of trip_legs
         if 'trip_legs' in request:
-            # Multi-city trip - validate the request
             validated_request = MultiCityTripPlanRequest(**request)
-
             valid, message = validate_multi_city_trip(validated_request.trip_legs)
             if not valid:
                 raise HTTPException(status_code=400, detail=message)
@@ -91,24 +98,13 @@ def plan_trip(request: dict):
             result = run_multi_city_planning(
                 trip_legs=trip_legs,
                 budget=validated_request.budget,
-                passengers=validated_request.passengers
+                passengers=validated_request.passengers,
+                progress_callback=progress_callback
             )
         else:
-            # Single-city trip - validate the request
             validated_request = TripPlanRequest(**request)
-
-            user_request = f"""
-            I need to plan a trip with the following details:
-            - Origin: {validated_request.origin}
-            - Destination: {validated_request.destination}
-            - Departure Date: {validated_request.departure_date}
-            - Return Date: {validated_request.return_date}
-            - Budget: ${validated_request.budget}
-            - Number of Passengers: {validated_request.passengers}
-
-            Please search for flights and hotels that fit within my budget and provide recommendations.
-            """
-            result = run_travel_planning(user_request)
+            user_request = _format_trip_prompt(validated_request)
+            result = run_travel_planning(user_request, progress_callback=progress_callback)
 
         if not result.get('success'):
             raise HTTPException(status_code=500, detail=result.get('error', 'Planning failed'))
@@ -125,6 +121,66 @@ def plan_trip(request: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error planning trip: {str(e)}")
+
+
+def _format_sse(event: str, data: Optional[dict]) -> str:
+    payload = json.dumps(data or {})
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+# Planner endpoint - Uses OpenAI Agents SDK
+@app.post("/planner/plan_trip")
+def plan_trip(request: dict):
+    """
+    Plan a complete trip using AI agents (supports both single-city and multi-city trips).
+    This endpoint orchestrates multiple agents to search flights, hotels, and create an itinerary.
+    """
+    return _execute_trip_planning(request)
+
+
+@app.post("/planner/plan_trip_stream")
+async def plan_trip_stream(request: dict):
+    """Stream workflow updates while the planner is running."""
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[tuple[str, Optional[dict]]] = asyncio.Queue()
+
+    def progress_callback(step: dict) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, ("workflow_step", step))
+
+    async def run_planner():
+        def blocking_task():
+            return _execute_trip_planning(request, progress_callback=progress_callback)
+
+        try:
+            result = await asyncio.to_thread(blocking_task)
+            await queue.put(("final_result", result))
+        except HTTPException as exc:
+            await queue.put(("error", {"detail": exc.detail, "status_code": exc.status_code}))
+        except Exception as exc:
+            await queue.put(("error", {"detail": f"Error planning trip: {str(exc)}"}))
+        finally:
+            await queue.put(("complete", None))
+
+    async def event_generator():
+        planner_task = asyncio.create_task(run_planner())
+        try:
+            while True:
+                event_type, payload = await queue.get()
+                if event_type == "complete":
+                    break
+                yield _format_sse(event_type, payload)
+                if event_type == "error":
+                    break
+        finally:
+            await planner_task
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+    }
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 # Flights endpoints
 @app.post("/flights/search", response_model=List[Flight])
