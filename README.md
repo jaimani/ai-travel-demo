@@ -1,6 +1,6 @@
 # Llama Inc. Travel - AI-Powered Trip Planning
 
-A full-stack travel booking demo powered by **OpenAI Agents SDK** with multi-agent orchestration for intelligent trip planning.
+A full-stack travel booking demo powered by **OpenAI Agents SDK** with multi-agent orchestration for intelligent trip planning. It uses **Stripe Checkout** to charge users for a subscription to unlock multi-city trip planning.
 
 ## Stack
 
@@ -12,7 +12,6 @@ A full-stack travel booking demo powered by **OpenAI Agents SDK** with multi-age
 
 - **OpenAI API Key** (required) - [Get one here](https://platform.openai.com/api-keys)
 - Python 3.11+ OR Docker
-- Node.js 20+ (if running locally without Docker)
 
 ## Quick Start
 
@@ -34,34 +33,20 @@ Edit `.env` and add your API key:
 OPENAI_API_KEY=sk-your-actual-api-key-here
 ```
 
-### 3. Run with Docker (Recommended)
+### 3. Start the App
+
+Use the provided helper script to launch both services with Docker Compose:
 
 ```bash
-docker-compose up --build
+./start.sh
 ```
+
+The script copies `.env.example` to `.env` if needed, reminds you to set `OPENAI_API_KEY`, and then brings up the stack via `docker-compose up --build`.
 
 Access the app:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
-
-### Alternative: Run Locally
-
-**Backend:**
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python -m uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
 
 ## Testing the App
 
@@ -133,4 +118,4 @@ Backend allows `localhost:3000` and `localhost:5173`. Update `backend/app.py` if
 
 ---
 
-Built with the OpenAI Agents SDK
+Built with the OpenAI Agents SDK and Stripe Checkout
