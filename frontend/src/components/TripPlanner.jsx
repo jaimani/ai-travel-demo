@@ -9,6 +9,7 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
   const [cities, setCities] = useState([
     { origin: '', destination: '', departure_date: '' }
   ]);
+  const [returnDate, setReturnDate] = useState(''); // Return date for simple round trips
   const [budget, setBudget] = useState('');
   const [passengers, setPassengers] = useState(1);
 
@@ -45,6 +46,21 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
   };
 
   const validateRoundTrip = () => {
+    // Simple round trip (1 leg with return date)
+    if (cities.length === 1) {
+      const origin = cities[0].origin.trim();
+      const destination = cities[0].destination.trim();
+      const departureDate = cities[0].departure_date;
+
+      if (!origin || !destination || !departureDate || !returnDate) {
+        setError('Please fill in all required fields');
+        return false;
+      }
+
+      return true;
+    }
+
+    // Multi-city trip (2+ legs)
     if (cities.length < 2) {
       setError('Multi-city trips must have at least 2 legs');
       return false;
@@ -82,12 +98,33 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
         return;
       }
 
-      const trip_legs = cities.map((leg, index) => ({
-        origin: leg.origin,
-        destination: leg.destination,
-        departure_date: leg.departure_date,
-        leg_number: index + 1
-      }));
+      // Build trip legs based on trip type
+      let trip_legs;
+      if (cities.length === 1) {
+        // Simple round trip: create 2 legs (outbound + return)
+        trip_legs = [
+          {
+            origin: cities[0].origin,
+            destination: cities[0].destination,
+            departure_date: cities[0].departure_date,
+            leg_number: 1
+          },
+          {
+            origin: cities[0].destination,
+            destination: cities[0].origin,
+            departure_date: returnDate,
+            leg_number: 2
+          }
+        ];
+      } else {
+        // Multi-city trip: use all legs as-is
+        trip_legs = cities.map((leg, index) => ({
+          origin: leg.origin,
+          destination: leg.destination,
+          departure_date: leg.departure_date,
+          leg_number: index + 1
+        }));
+      }
 
       const result = await planTrip({
         trip_legs,
@@ -104,16 +141,33 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
         );
 
         try {
-          // Search flights for each leg and hotels for each destination city (excluding origin)
+          // Search flights for each leg and hotels for each destination city
+          let flightLegs, hotelCities;
+
+          if (cities.length === 1) {
+            // Simple round trip
+            flightLegs = [
+              { origin: cities[0].origin, destination: cities[0].destination, departure_date: cities[0].departure_date },
+              { origin: cities[0].destination, destination: cities[0].origin, departure_date: returnDate }
+            ];
+            hotelCities = [{
+              city: cities[0].destination,
+              checkin_date: cities[0].departure_date,
+              checkout_date: returnDate
+            }];
+          } else {
+            // Multi-city trip
+            flightLegs = cities;
+            hotelCities = cities.slice(0, -1).map((leg, i) => ({
+              city: leg.destination,
+              checkin_date: leg.departure_date,
+              checkout_date: cities[i + 1].departure_date
+            }));
+          }
+
           const [flightResults, hotelResults] = await Promise.all([
-            searchMultiLegFlights({ legs: cities }),
-            searchMultiCityHotels({
-              cities: cities.slice(0, -1).map((leg, i) => ({
-                city: leg.destination,
-                checkin_date: leg.departure_date,
-                checkout_date: cities[i + 1].departure_date
-              }))
-            })
+            searchMultiLegFlights({ legs: flightLegs }),
+            searchMultiCityHotels({ cities: hotelCities })
           ]);
 
           onFlightsFound(flightResults || {});
@@ -141,9 +195,10 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
         <div className="multi-city-legs">
           {cities.map((leg, index) => (
             <div key={index} className="city-leg">
-              <div className="leg-header">
-                <h4>Leg {index + 1}</h4>
-                {cities.length > 1 && (
+              {/* Only show leg header for multi-city trips (2+ legs) */}
+              {cities.length > 1 && (
+                <div className="leg-header">
+                  <h4>Leg {index + 1}</h4>
                   <button
                     type="button"
                     onClick={() => removeCity(index)}
@@ -151,8 +206,8 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
                   >
                     Remove
                   </button>
-                )}
-              </div>
+                </div>
+              )}
 
               <div className="form-row">
                 <div className="form-group">
@@ -188,6 +243,19 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
                     required
                   />
                 </div>
+
+                {/* Show return date only for the first leg when it's a simple round trip */}
+                {index === 0 && cities.length === 1 && (
+                  <div className="form-group">
+                    <label>Return Date</label>
+                    <input
+                      type="date"
+                      value={returnDate}
+                      onChange={(e) => setReturnDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -199,7 +267,7 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
           className="btn-add-city premium"
           disabled={cities.length >= MAX_LEGS}
         >
-          👑 + Add Another City
+          + Add Another City 👑
         </button>
 
         <div className="form-row">

@@ -193,10 +193,45 @@ function App() {
                   {workflowSteps.map((step, index) => (
                     <div key={index} className={`workflow-step ${step.type}`}>
                       {step.message}
-                      {showToolDetails && step.type === 'tool_call' && (
-                        <pre className="tool-call-details">
-                          {JSON.stringify(step, null, 2)}
-                        </pre>
+
+                      {/* Show agent response when completed */}
+                      {showToolDetails && step.type === 'agent_end' && step.response && (
+                        <div className="tool-call-details">
+                          <strong>Agent Response:</strong>
+                          <pre style={{ whiteSpace: 'pre-wrap', marginTop: '8px' }}>
+                            {step.response}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Show handoff context */}
+                      {showToolDetails && step.type === 'handoff' && step.context && (
+                        <div className="tool-call-details">
+                          <strong>Handoff Context:</strong>
+                          <pre style={{ whiteSpace: 'pre-wrap', marginTop: '8px' }}>
+                            {step.context}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Show LLM prompt */}
+                      {showToolDetails && step.type === 'llm_call' && step.prompt && step.prompt.length > 0 && (
+                        <div className="tool-call-details">
+                          <strong>LLM Prompt (last {step.prompt.length} messages):</strong>
+                          <pre style={{ whiteSpace: 'pre-wrap', marginTop: '8px' }}>
+                            {JSON.stringify(step.prompt, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Show tool input */}
+                      {showToolDetails && step.type === 'tool_call' && step.tool_input && (
+                        <div className="tool-call-details">
+                          <strong>Tool Input:</strong>
+                          <pre style={{ whiteSpace: 'pre-wrap', marginTop: '8px' }}>
+                            {JSON.stringify(step.tool_input, null, 2)}
+                          </pre>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -298,10 +333,6 @@ function App() {
           )}
         </div>
       </main>
-
-      <footer className="app-footer">
-        <p>Powered by OpenAI Agents SDK</p>
-      </footer>
     </div>
   );
 }

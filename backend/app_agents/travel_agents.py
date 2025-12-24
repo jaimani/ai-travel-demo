@@ -213,17 +213,37 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
 
         async def on_agent_end(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
+            result = self._get_arg(args, kwargs, 'result', 2)
             if not agent:
                 return
+
+            # Extract agent response from result
+            response_text = None
+            if result and hasattr(result, 'final_output'):
+                response_text = result.final_output
+            elif result and hasattr(result, 'messages') and result.messages:
+                last_msg = result.messages[-1]
+                if hasattr(last_msg, 'content'):
+                    content = last_msg.content
+                    if isinstance(content, list):
+                        for block in content:
+                            if hasattr(block, 'text'):
+                                response_text = block.text
+                                break
+                    else:
+                        response_text = str(content)
+
             record_step({
                 'type': 'agent_end',
                 'agent': agent.name,
-                'message': f"✓ {agent.name} completed"
+                'message': f"✓ {agent.name} completed",
+                'response': response_text
             })
 
         async def on_tool_start(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
             tool = self._get_arg(args, kwargs, 'tool', 2)
+            tool_input = self._get_arg(args, kwargs, 'tool_input', 3)
             if not agent:
                 return
             tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
@@ -231,18 +251,58 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
                 'type': 'tool_call',
                 'agent': agent.name,
                 'tool': tool_name,
-                'message': f"🔧 {agent.name} is calling {tool_name}"
+                'message': f"🔧 {agent.name} is calling {tool_name}",
+                'tool_input': tool_input
             })
 
         async def on_llm_start(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
+            messages = self._get_arg(args, kwargs, 'messages', 2)
             if not agent:
                 return
             model_name = getattr(agent, 'model', 'OpenAI model')
+
+            # Extract prompt from messages with better filtering
+            prompt_preview = None
+            if messages:
+                formatted_messages = []
+                for msg in messages:
+                    role = getattr(msg, 'role', None)
+                    content = getattr(msg, 'content', None)
+
+                    # Skip messages with no role or content
+                    if not role or not content:
+                        continue
+
+                    # Handle content blocks
+                    if isinstance(content, list):
+                        text_parts = []
+                        for block in content:
+                            if hasattr(block, 'text') and block.text:
+                                text_parts.append(block.text)
+                        content = '\n'.join(text_parts) if text_parts else None
+
+                    # Only add messages with actual content
+                    if content and str(content).strip():
+                        content_str = str(content)
+                        # Truncate very long content
+                        if len(content_str) > 500:
+                            content_str = content_str[:500] + '... (truncated)'
+
+                        formatted_messages.append({
+                            'role': role,
+                            'content': content_str
+                        })
+
+                # Only include if we have meaningful messages (limit to last 5 for brevity)
+                if formatted_messages:
+                    prompt_preview = formatted_messages[-5:] if len(formatted_messages) > 5 else formatted_messages
+
             record_step({
                 'type': 'llm_call',
                 'agent': agent.name,
-                'message': f"💬 {agent.name} is calling LLM ({model_name})"
+                'message': f"💬 {agent.name} is calling LLM ({model_name})",
+                'prompt': prompt_preview
             })
 
     def extract_messages(agent_result) -> tuple[str, list[dict[str, str]]]:
@@ -282,18 +342,21 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
         # Planner gathers requirements/strategy
         planner_summary = run_agent(planner_agent, user_request)
 
-        def add_handoff(from_agent: str, to_agent: str):
-            record_step({
+        def add_handoff(from_agent: str, to_agent: str, context: str = None):
+            step_data = {
                 'type': 'handoff',
                 'from': from_agent,
                 'to': to_agent,
                 'message': f"➡️  Handing off from {from_agent} to {to_agent}"
-            })
+            }
+            if context:
+                step_data['context'] = context
+            record_step(step_data)
 
-        add_handoff('PlannerAgent', 'FlightsAgent')
+        add_handoff('PlannerAgent', 'FlightsAgent', context=user_request)
         flights_summary = run_agent(flights_agent, user_request)
 
-        add_handoff('FlightsAgent', 'HotelsAgent')
+        add_handoff('FlightsAgent', 'HotelsAgent', context=user_request)
         hotels_summary = run_agent(hotels_agent, user_request)
 
         # Provide context from earlier steps to itinerary agent
@@ -319,7 +382,7 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
         Format the response in Markdown.
         """
 
-        add_handoff('HotelsAgent', 'ItineraryAgent')
+        add_handoff('HotelsAgent', 'ItineraryAgent', context=itinerary_prompt)
         final_summary = run_agent(itinerary_agent, itinerary_prompt)
 
         return {
@@ -390,17 +453,37 @@ def run_multi_city_planning(
 
         async def on_agent_end(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
+            result = self._get_arg(args, kwargs, 'result', 2)
             if not agent:
                 return
+
+            # Extract agent response from result
+            response_text = None
+            if result and hasattr(result, 'final_output'):
+                response_text = result.final_output
+            elif result and hasattr(result, 'messages') and result.messages:
+                last_msg = result.messages[-1]
+                if hasattr(last_msg, 'content'):
+                    content = last_msg.content
+                    if isinstance(content, list):
+                        for block in content:
+                            if hasattr(block, 'text'):
+                                response_text = block.text
+                                break
+                    else:
+                        response_text = str(content)
+
             record_step({
                 'type': 'agent_end',
                 'agent': agent.name,
-                'message': f"✓ {agent.name} completed"
+                'message': f"✓ {agent.name} completed",
+                'response': response_text
             })
 
         async def on_tool_start(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
             tool = self._get_arg(args, kwargs, 'tool', 2)
+            tool_input = self._get_arg(args, kwargs, 'tool_input', 3)
             if not agent:
                 return
             tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
@@ -408,18 +491,58 @@ def run_multi_city_planning(
                 'type': 'tool_call',
                 'agent': agent.name,
                 'tool': tool_name,
-                'message': f"🔧 {agent.name} is calling {tool_name}"
+                'message': f"🔧 {agent.name} is calling {tool_name}",
+                'tool_input': tool_input
             })
 
         async def on_llm_start(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
+            messages = self._get_arg(args, kwargs, 'messages', 2)
             if not agent:
                 return
             model_name = getattr(agent, 'model', 'OpenAI model')
+
+            # Extract prompt from messages with better filtering
+            prompt_preview = None
+            if messages:
+                formatted_messages = []
+                for msg in messages:
+                    role = getattr(msg, 'role', None)
+                    content = getattr(msg, 'content', None)
+
+                    # Skip messages with no role or content
+                    if not role or not content:
+                        continue
+
+                    # Handle content blocks
+                    if isinstance(content, list):
+                        text_parts = []
+                        for block in content:
+                            if hasattr(block, 'text') and block.text:
+                                text_parts.append(block.text)
+                        content = '\n'.join(text_parts) if text_parts else None
+
+                    # Only add messages with actual content
+                    if content and str(content).strip():
+                        content_str = str(content)
+                        # Truncate very long content
+                        if len(content_str) > 500:
+                            content_str = content_str[:500] + '... (truncated)'
+
+                        formatted_messages.append({
+                            'role': role,
+                            'content': content_str
+                        })
+
+                # Only include if we have meaningful messages (limit to last 5 for brevity)
+                if formatted_messages:
+                    prompt_preview = formatted_messages[-5:] if len(formatted_messages) > 5 else formatted_messages
+
             record_step({
                 'type': 'llm_call',
                 'agent': agent.name,
-                'message': f"💬 {agent.name} is calling LLM ({model_name})"
+                'message': f"💬 {agent.name} is calling LLM ({model_name})",
+                'prompt': prompt_preview
             })
 
     def extract_messages(agent_result) -> tuple[str, list[dict[str, str]]]:
@@ -485,20 +608,23 @@ def run_multi_city_planning(
         planner_summary = run_agent(planner_agent, user_request)
         print(f"[DEBUG] Planner completed")
 
-        def add_handoff(from_agent: str, to_agent: str):
-            record_step({
+        def add_handoff(from_agent: str, to_agent: str, context: str = None):
+            step_data = {
                 'type': 'handoff',
                 'from': from_agent,
                 'to': to_agent,
                 'message': f"➡️  Handing off from {from_agent} to {to_agent}"
-            })
+            }
+            if context:
+                step_data['context'] = context
+            record_step(step_data)
 
-        add_handoff('PlannerAgent', 'FlightsAgent')
+        add_handoff('PlannerAgent', 'FlightsAgent', context=user_request)
         print(f"[DEBUG] Starting FlightsAgent")
         flights_summary = run_agent(flights_agent, user_request)
         print(f"[DEBUG] FlightsAgent completed")
 
-        add_handoff('FlightsAgent', 'HotelsAgent')
+        add_handoff('FlightsAgent', 'HotelsAgent', context=user_request)
         print(f"[DEBUG] Starting HotelsAgent")
         hotels_summary = run_agent(hotels_agent, user_request)
         print(f"[DEBUG] HotelsAgent completed")
@@ -528,7 +654,7 @@ def run_multi_city_planning(
         Format the response in Markdown with clear sections.
         """
 
-        add_handoff('HotelsAgent', 'ItineraryAgent')
+        add_handoff('HotelsAgent', 'ItineraryAgent', context=itinerary_prompt)
         print(f"[DEBUG] Starting ItineraryAgent")
         final_summary = run_agent(itinerary_agent, itinerary_prompt)
         print(f"[DEBUG] ItineraryAgent completed")

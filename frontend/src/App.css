@@ -204,18 +204,204 @@
   overflow-x: auto;
 }
 
-.ai-plan-content :is(p, ul, ol, li) {
-  font-size: 14px;
-  line-height: 1.6;
+/* Headers */
+.ai-plan-content h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+  margin: 24px 0 16px 0;
+  line-height: 1.3;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 8px;
+}
+
+.ai-plan-content h2 {
+  font-size: 24px;
+  font-weight: 700;
   color: #1f2937;
+  margin: 20px 0 12px 0;
+  line-height: 1.3;
+}
+
+.ai-plan-content h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #374151;
+  margin: 16px 0 10px 0;
+  line-height: 1.4;
+}
+
+.ai-plan-content h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #4b5563;
+  margin: 14px 0 8px 0;
+  line-height: 1.4;
+}
+
+.ai-plan-content h5 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #6b7280;
+  margin: 12px 0 6px 0;
+  line-height: 1.4;
+}
+
+.ai-plan-content h6 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #9ca3af;
+  margin: 10px 0 6px 0;
+  line-height: 1.4;
+}
+
+/* First heading should have less top margin */
+.ai-plan-content h1:first-child,
+.ai-plan-content h2:first-child,
+.ai-plan-content h3:first-child {
+  margin-top: 0;
+}
+
+/* Paragraphs and text */
+.ai-plan-content p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1f2937;
+  margin: 12px 0;
+}
+
+/* Bold text */
+.ai-plan-content strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+/* Italic text */
+.ai-plan-content em {
+  font-style: italic;
+  color: #374151;
+}
+
+/* Lists */
+.ai-plan-content ul,
+.ai-plan-content ol {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1f2937;
+  margin: 12px 0;
+  padding-left: 28px;
+}
+
+.ai-plan-content li {
+  margin: 6px 0;
 }
 
 .ai-plan-content ul {
-  padding-left: 20px;
+  list-style-type: disc;
 }
 
-.ai-plan-content strong {
+.ai-plan-content ol {
+  list-style-type: decimal;
+}
+
+/* Nested lists */
+.ai-plan-content ul ul,
+.ai-plan-content ol ul {
+  list-style-type: circle;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.ai-plan-content ul ul ul,
+.ai-plan-content ol ul ul {
+  list-style-type: square;
+}
+
+/* Code blocks */
+.ai-plan-content pre {
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 16px 0;
+  font-family: 'Courier New', Consolas, Monaco, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Inline code */
+.ai-plan-content code {
+  background: #e5e7eb;
+  color: #be123c;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', Consolas, Monaco, monospace;
+  font-size: 13px;
+}
+
+.ai-plan-content pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* Blockquotes */
+.ai-plan-content blockquote {
+  border-left: 4px solid #9ca3af;
+  padding-left: 16px;
+  margin: 16px 0;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Links */
+.ai-plan-content a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.ai-plan-content a:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+/* Horizontal rules */
+.ai-plan-content hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 24px 0;
+}
+
+/* Tables */
+.ai-plan-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.ai-plan-content th {
+  background: #f3f4f6;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
   color: #111827;
+  border: 1px solid #e5e7eb;
+}
+
+.ai-plan-content td {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  color: #374151;
+}
+
+.ai-plan-content tr:nth-child(even) {
+  background: #f9fafb;
 }
 
 .recommendation {
