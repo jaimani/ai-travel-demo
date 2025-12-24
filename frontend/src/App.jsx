@@ -190,9 +190,25 @@ function App() {
               </div>
               {isWorkflowExpanded && (
                 <div className="workflow-steps">
-                  {workflowSteps.map((step, index) => (
+                  {workflowSteps.map((step, index) => {
+                    // Determine duration class for visual indicator
+                    let durationClass = '';
+                    if (step.duration) {
+                      if (step.duration > 5) {
+                        durationClass = 'very-slow';
+                      } else if (step.duration > 2) {
+                        durationClass = 'slow';
+                      }
+                    }
+
+                    return (
                     <div key={index} className={`workflow-step ${step.type}`}>
                       {step.message}
+                      {step.duration && (
+                        <span className={`workflow-step-duration ${durationClass}`}>
+                          {step.duration.toFixed(2)}s
+                        </span>
+                      )}
 
                       {/* Show agent response when completed */}
                       {showToolDetails && step.type === 'agent_end' && step.response && (
@@ -234,7 +250,8 @@ function App() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

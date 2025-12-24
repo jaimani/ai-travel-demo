@@ -137,25 +137,7 @@ itinerary_agent = Agent(
 # Main Planner Agent (orchestrator) - defined after other agents so it can reference them
 planner_agent = Agent(
     name="PlannerAgent",
-    instructions="""You are the main travel planning coordinator for Llama Inc. Travel Agency.
-
-    Your role is to:
-    1. Understand the customer's travel requirements:
-       - For SINGLE-CITY trips: origin, destination, dates, budget, passengers
-       - For MULTI-CITY trips: multiple city legs (e.g., NYC→LAX→SFO→NYC), dates per leg, budget, passengers
-    2. Analyze the requirements and provide initial guidance:
-       - Confirm understanding of the trip type (single-city or multi-city)
-       - Identify which cities need flights
-       - Identify which cities need hotels (EXCLUDING the origin city for multi-city trips)
-       - Note any budget considerations
-    3. For multi-city trips, ensure:
-       - Hotels are NOT booked for the origin city
-       - All flight legs are connected properly
-       - Total cost stays within budget
-    4. Provide helpful initial recommendations
-
-    Always be professional, friendly, and focused on finding the best value for the customer.
-    Do NOT call any tools - just analyze requirements and provide guidance.""",
+    instructions="""You are a travel planning coordinator. Briefly acknowledge the trip request and confirm you understand the requirements (origin, destination, dates, budget). Keep your response to 1-2 sentences. Do NOT call any tools.""",
     model="gpt-5-mini"
 )
 
@@ -177,10 +159,14 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
     Returns:
         Dictionary containing the planning results
     """
+    import time
     workflow_steps: list[dict[str, Any]] = []
+    step_timings: dict[str, float] = {}  # Track start times for duration calculation
 
     def record_step(step: dict[str, Any]) -> None:
         """Store the workflow step locally and optionally emit it to listeners."""
+        # Add timestamp to all steps
+        step['timestamp'] = time.time()
         workflow_steps.append(step)
         if progress_callback:
             try:
@@ -205,6 +191,7 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
             agent = self._get_arg(args, kwargs, 'agent', 1)
             if not agent:
                 return
+            step_timings[f'agent_{agent.name}'] = time.time()
             record_step({
                 'type': 'agent_start',
                 'agent': agent.name,
@@ -216,6 +203,13 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
             result = self._get_arg(args, kwargs, 'result', 2)
             if not agent:
                 return
+
+            # Calculate duration
+            duration = None
+            timing_key = f'agent_{agent.name}'
+            if timing_key in step_timings:
+                duration = time.time() - step_timings[timing_key]
+                del step_timings[timing_key]
 
             # Extract agent response from result
             response_text = None
@@ -233,11 +227,13 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
                     else:
                         response_text = str(content)
 
+            duration_msg = f" ({duration:.2f}s)" if duration else ""
             record_step({
                 'type': 'agent_end',
                 'agent': agent.name,
-                'message': f"✓ {agent.name} completed",
-                'response': response_text
+                'message': f"✓ {agent.name} completed{duration_msg}",
+                'response': response_text,
+                'duration': duration
             })
 
         async def on_tool_start(self, *args, **kwargs):
@@ -247,6 +243,7 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
             if not agent:
                 return
             tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
+            step_timings[f'tool_{agent.name}_{tool_name}'] = time.time()
             record_step({
                 'type': 'tool_call',
                 'agent': agent.name,
@@ -255,12 +252,36 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
                 'tool_input': tool_input
             })
 
+        async def on_tool_end(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            tool = self._get_arg(args, kwargs, 'tool', 2)
+            if not agent:
+                return
+            tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
+
+            # Calculate duration
+            duration = None
+            timing_key = f'tool_{agent.name}_{tool_name}'
+            if timing_key in step_timings:
+                duration = time.time() - step_timings[timing_key]
+                del step_timings[timing_key]
+
+            duration_msg = f" ({duration:.2f}s)" if duration else ""
+            record_step({
+                'type': 'tool_end',
+                'agent': agent.name,
+                'tool': tool_name,
+                'message': f"✓ {tool_name} completed{duration_msg}",
+                'duration': duration
+            })
+
         async def on_llm_start(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
             messages = self._get_arg(args, kwargs, 'messages', 2)
             if not agent:
                 return
             model_name = getattr(agent, 'model', 'OpenAI model')
+            step_timings[f'llm_{agent.name}'] = time.time()
 
             # Extract prompt from messages with better filtering
             prompt_preview = None
@@ -305,6 +326,27 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
                 'prompt': prompt_preview
             })
 
+        async def on_llm_end(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            if not agent:
+                return
+            model_name = getattr(agent, 'model', 'OpenAI model')
+
+            # Calculate duration
+            duration = None
+            timing_key = f'llm_{agent.name}'
+            if timing_key in step_timings:
+                duration = time.time() - step_timings[timing_key]
+                del step_timings[timing_key]
+
+            duration_msg = f" ({duration:.2f}s)" if duration else ""
+            record_step({
+                'type': 'llm_end',
+                'agent': agent.name,
+                'message': f"✓ LLM call completed{duration_msg}",
+                'duration': duration
+            })
+
     def extract_messages(agent_result) -> tuple[str, list[dict[str, str]]]:
         final_output = getattr(agent_result, 'final_output', None)
         messages = []
@@ -327,11 +369,11 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
         response_text = final_output if final_output else (messages[-1]['content'] if messages else "No response generated")
         return response_text, messages
 
-    def run_agent(agent: Agent, prompt: str) -> str:
+    def run_agent(agent: Agent, prompt: str, max_turns: int = 5) -> str:
         result = Runner.run_sync(
             starting_agent=agent,
             input=prompt,
-            max_turns=5,
+            max_turns=max_turns,
             hooks=LoggingHooks()
         )
         response_text, messages = extract_messages(result)
@@ -340,7 +382,9 @@ def run_travel_planning(user_request: str, progress_callback: Optional[Callable[
 
     try:
         # Planner gathers requirements/strategy
+        print(f"[TIMING] Starting PlannerAgent at {time.time()}")
         planner_summary = run_agent(planner_agent, user_request)
+        print(f"[TIMING] PlannerAgent completed at {time.time()}")
 
         def add_handoff(from_agent: str, to_agent: str, context: str = None):
             step_data = {
@@ -419,9 +463,13 @@ def run_multi_city_planning(
     Returns:
         Dictionary containing the planning results
     """
+    import time
     workflow_steps: list[dict[str, Any]] = []
+    step_timings: dict[str, float] = {}  # Track start times for duration calculation
 
     def record_step(step: dict[str, Any]) -> None:
+        # Add timestamp to all steps
+        step['timestamp'] = time.time()
         workflow_steps.append(step)
         if progress_callback:
             try:
@@ -445,6 +493,7 @@ def run_multi_city_planning(
             agent = self._get_arg(args, kwargs, 'agent', 1)
             if not agent:
                 return
+            step_timings[f'agent_{agent.name}'] = time.time()
             record_step({
                 'type': 'agent_start',
                 'agent': agent.name,
@@ -456,6 +505,13 @@ def run_multi_city_planning(
             result = self._get_arg(args, kwargs, 'result', 2)
             if not agent:
                 return
+
+            # Calculate duration
+            duration = None
+            timing_key = f'agent_{agent.name}'
+            if timing_key in step_timings:
+                duration = time.time() - step_timings[timing_key]
+                del step_timings[timing_key]
 
             # Extract agent response from result
             response_text = None
@@ -473,11 +529,13 @@ def run_multi_city_planning(
                     else:
                         response_text = str(content)
 
+            duration_msg = f" ({duration:.2f}s)" if duration else ""
             record_step({
                 'type': 'agent_end',
                 'agent': agent.name,
-                'message': f"✓ {agent.name} completed",
-                'response': response_text
+                'message': f"✓ {agent.name} completed{duration_msg}",
+                'response': response_text,
+                'duration': duration
             })
 
         async def on_tool_start(self, *args, **kwargs):
@@ -487,6 +545,7 @@ def run_multi_city_planning(
             if not agent:
                 return
             tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
+            step_timings[f'tool_{agent.name}_{tool_name}'] = time.time()
             record_step({
                 'type': 'tool_call',
                 'agent': agent.name,
@@ -495,12 +554,36 @@ def run_multi_city_planning(
                 'tool_input': tool_input
             })
 
+        async def on_tool_end(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            tool = self._get_arg(args, kwargs, 'tool', 2)
+            if not agent:
+                return
+            tool_name = getattr(tool, 'name', 'unknown') if tool else 'unknown'
+
+            # Calculate duration
+            duration = None
+            timing_key = f'tool_{agent.name}_{tool_name}'
+            if timing_key in step_timings:
+                duration = time.time() - step_timings[timing_key]
+                del step_timings[timing_key]
+
+            duration_msg = f" ({duration:.2f}s)" if duration else ""
+            record_step({
+                'type': 'tool_end',
+                'agent': agent.name,
+                'tool': tool_name,
+                'message': f"✓ {tool_name} completed{duration_msg}",
+                'duration': duration
+            })
+
         async def on_llm_start(self, *args, **kwargs):
             agent = self._get_arg(args, kwargs, 'agent', 1)
             messages = self._get_arg(args, kwargs, 'messages', 2)
             if not agent:
                 return
             model_name = getattr(agent, 'model', 'OpenAI model')
+            step_timings[f'llm_{agent.name}'] = time.time()
 
             # Extract prompt from messages with better filtering
             prompt_preview = None
@@ -545,6 +628,27 @@ def run_multi_city_planning(
                 'prompt': prompt_preview
             })
 
+        async def on_llm_end(self, *args, **kwargs):
+            agent = self._get_arg(args, kwargs, 'agent', 1)
+            if not agent:
+                return
+            model_name = getattr(agent, 'model', 'OpenAI model')
+
+            # Calculate duration
+            duration = None
+            timing_key = f'llm_{agent.name}'
+            if timing_key in step_timings:
+                duration = time.time() - step_timings[timing_key]
+                del step_timings[timing_key]
+
+            duration_msg = f" ({duration:.2f}s)" if duration else ""
+            record_step({
+                'type': 'llm_end',
+                'agent': agent.name,
+                'message': f"✓ LLM call completed{duration_msg}",
+                'duration': duration
+            })
+
     def extract_messages(agent_result) -> tuple[str, list[dict[str, str]]]:
         final_output = getattr(agent_result, 'final_output', None)
         messages = []
@@ -567,11 +671,11 @@ def run_multi_city_planning(
         response_text = final_output if final_output else (messages[-1]['content'] if messages else "No response generated")
         return response_text, messages
 
-    def run_agent(agent: Agent, prompt: str) -> str:
+    def run_agent(agent: Agent, prompt: str, max_turns: int = 5) -> str:
         result = Runner.run_sync(
             starting_agent=agent,
             input=prompt,
-            max_turns=5,
+            max_turns=max_turns,
             hooks=LoggingHooks()
         )
         response_text, messages = extract_messages(result)
