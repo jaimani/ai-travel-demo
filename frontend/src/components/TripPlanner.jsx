@@ -1,18 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { planTrip, searchMultiLegFlights, searchMultiCityHotels, getSubscriptionStatus } from '../utils/api';
 import SubscriptionModal from './SubscriptionModal';
+import SubscriptionSuccess from './SubscriptionSuccess';
 import './TripPlanner.css';
 
 const MAX_LEGS = 4;
+const FORM_STATE_KEY = 'tripPlannerFormState';
 
-function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowReset, onWorkflowStep }) {
-  // Multi-city form data
-  const [cities, setCities] = useState([
-    { origin: '', destination: '', departure_date: '' }
-  ]);
-  const [returnDate, setReturnDate] = useState(''); // Return date for simple round trips
-  const [budget, setBudget] = useState('');
-  const [passengers, setPassengers] = useState(1);
+function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowReset, onWorkflowStep, onSubscriptionStatusChange }) {
+  // Multi-city form data - restore from localStorage if available
+  const [cities, setCities] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FORM_STATE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.cities || [{ origin: '', destination: '', departure_date: '' }];
+      }
+    } catch (err) {
+      console.error('Failed to restore form state:', err);
+    }
+    return [{ origin: '', destination: '', departure_date: '' }];
+  });
+  const [returnDate, setReturnDate] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FORM_STATE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.returnDate || '';
+      }
+    } catch (err) {
+      console.error('Failed to restore form state:', err);
+    }
+    return '';
+  });
+  const [budget, setBudget] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FORM_STATE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.budget || '';
+      }
+    } catch (err) {
+      console.error('Failed to restore form state:', err);
+    }
+    return '';
+  });
+  const [passengers, setPassengers] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FORM_STATE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.passengers || 1;
+      }
+    } catch (err) {
+      console.error('Failed to restore form state:', err);
+    }
+    return 1;
+  });
   const [userEmail, setUserEmail] = useState(() => {
     // Try to restore email from localStorage
     return localStorage.getItem('userEmail') || '';
@@ -21,6 +65,7 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
 
   // Check subscription status when email changes
@@ -30,25 +75,66 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
       localStorage.setItem('userEmail', userEmail);
 
       getSubscriptionStatus(userEmail)
-        .then(status => setSubscriptionStatus(status))
+        .then(status => {
+          setSubscriptionStatus(status);
+          // Notify parent component
+          if (onSubscriptionStatusChange) {
+            onSubscriptionStatusChange(userEmail, status);
+          }
+        })
         .catch(err => console.error('Failed to get subscription status:', err));
     }
-  }, [userEmail]);
+  }, [userEmail, onSubscriptionStatusChange]);
 
   // Check for success/canceled query params from Stripe redirect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('success')) {
+      // Show success modal
+      setShowSuccessModal(true);
+
       // Refresh subscription status after successful payment
       if (userEmail) {
         getSubscriptionStatus(userEmail)
-          .then(status => setSubscriptionStatus(status))
+          .then(status => {
+            setSubscriptionStatus(status);
+            // Notify parent component
+            if (onSubscriptionStatusChange) {
+              onSubscriptionStatusChange(userEmail, status);
+            }
+
+            // Auto-add second leg if subscription is now active and only 1 leg exists
+            if (status?.hasActiveSubscription) {
+              setCities(prevCities => {
+                if (prevCities.length === 1) {
+                  const lastCity = prevCities[0];
+                  return [...prevCities, {
+                    origin: lastCity.destination || '',
+                    destination: '',
+                    departure_date: ''
+                  }];
+                }
+                return prevCities;
+              });
+            }
+          })
           .catch(err => console.error('Failed to refresh subscription:', err));
       }
       // Clear URL params
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [userEmail]);
+
+  // Persist form state to localStorage
+  useEffect(() => {
+    const formState = {
+      cities,
+      returnDate,
+      budget,
+      passengers
+    };
+    localStorage.setItem(FORM_STATE_KEY, JSON.stringify(formState));
+  }, [cities, returnDate, budget, passengers]);
 
   // Multi-city helper functions
   const addCity = () => {
@@ -215,6 +301,9 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
 
           onFlightsFound(flightResults || {});
           onHotelsFound(hotelResults || {});
+
+          // Clear saved form state after successful trip planning
+          localStorage.removeItem(FORM_STATE_KEY);
         } catch (searchErr) {
           console.error('Error fetching booking options:', searchErr);
           setError('Trip planned, but we could not load bookable flights or hotels. Please try again.');
@@ -395,6 +484,13 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
           }
         }}
       />
+
+      {showSuccessModal && userEmail && (
+        <SubscriptionSuccess
+          userEmail={userEmail}
+          onClose={() => setShowSuccessModal(false)}
+        />
+      )}
     </div>
   );
 }
