@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { planTrip, searchMultiLegFlights, searchMultiCityHotels } from '../utils/api';
+import React, { useState, useEffect } from 'react';
+import { planTrip, searchMultiLegFlights, searchMultiCityHotels, getSubscriptionStatus } from '../utils/api';
+import SubscriptionModal from './SubscriptionModal';
 import './TripPlanner.css';
 
 const MAX_LEGS = 4;
@@ -12,13 +13,54 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
   const [returnDate, setReturnDate] = useState(''); // Return date for simple round trips
   const [budget, setBudget] = useState('');
   const [passengers, setPassengers] = useState(1);
+  const [userEmail, setUserEmail] = useState(() => {
+    // Try to restore email from localStorage
+    return localStorage.getItem('userEmail') || '';
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+
+  // Check subscription status when email changes
+  useEffect(() => {
+    if (userEmail) {
+      // Save email to localStorage whenever it changes
+      localStorage.setItem('userEmail', userEmail);
+
+      getSubscriptionStatus(userEmail)
+        .then(status => setSubscriptionStatus(status))
+        .catch(err => console.error('Failed to get subscription status:', err));
+    }
+  }, [userEmail]);
+
+  // Check for success/canceled query params from Stripe redirect
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('success')) {
+      // Refresh subscription status after successful payment
+      if (userEmail) {
+        getSubscriptionStatus(userEmail)
+          .then(status => setSubscriptionStatus(status))
+          .catch(err => console.error('Failed to refresh subscription:', err));
+      }
+      // Clear URL params
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [userEmail]);
 
   // Multi-city helper functions
   const addCity = () => {
     if (cities.length >= MAX_LEGS) return; // Max legs guard
+
+    // Check if user has subscription for multi-city trips (2+ legs)
+    if (cities.length >= 1) {
+      if (!subscriptionStatus?.hasActiveSubscription) {
+        setShowSubscriptionModal(true);
+        return;
+      }
+    }
 
     const lastCity = cities[cities.length - 1];
     setCities([...cities, {
@@ -130,7 +172,8 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
         trip_legs,
         budget: parseFloat(budget),
         passengers: parseInt(passengers),
-        trip_type: 'multi_city'
+        trip_type: 'multi_city',
+        user_email: userEmail
       }, { onWorkflowStep });
 
       if (result.success) {
@@ -181,7 +224,14 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
       }
     } catch (err) {
       console.error('Error planning trip:', err);
-      setError(err.detail || err.message || 'An error occurred while planning your trip.');
+
+      // Check if error is subscription-related
+      if (err.response?.status === 403 || err.detail?.includes('subscription')) {
+        setShowSubscriptionModal(true);
+        setError('Multi-city trips require a premium subscription.');
+      } else {
+        setError(err.detail || err.message || 'An error occurred while planning your trip.');
+      }
     } finally {
       setLoading(false);
     }
@@ -270,6 +320,22 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
           + Add Another City 👑
         </button>
 
+        <div className="form-row" style={{ display: 'none' }}>
+          <div className="form-group">
+            <label htmlFor="user-email">Email</label>
+            <input
+              type="email"
+              id="user-email"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              placeholder="your@email.com"
+            />
+            {subscriptionStatus?.hasActiveSubscription && (
+              <span className="subscription-badge">Premium ✓</span>
+            )}
+          </div>
+        </div>
+
         <div className="form-row">
           <div className="form-group">
             <label htmlFor="multi-budget">Budget ($)</label>
@@ -315,6 +381,20 @@ function TripPlanner({ onTripPlanned, onFlightsFound, onHotelsFound, onWorkflowR
           )}
         </button>
       </form>
+
+      <SubscriptionModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        userEmail={userEmail}
+        onSubscriptionChange={() => {
+          // Refresh subscription status
+          if (userEmail) {
+            getSubscriptionStatus(userEmail)
+              .then(status => setSubscriptionStatus(status))
+              .catch(err => console.error('Failed to refresh subscription:', err));
+          }
+        }}
+      />
     </div>
   );
 }

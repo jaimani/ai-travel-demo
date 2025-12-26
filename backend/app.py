@@ -22,11 +22,13 @@ from models.database import (
     MultiCityBookingRequest,
     MultiCityBooking,
     validate_multi_city_trip,
+    has_active_subscription,
     engine
 )
 from tools.flights_tool import search_flights, get_flight_by_id
 from tools.hotels_tool import search_hotels, get_hotel_by_id
 from app_agents.travel_agents import run_travel_planning, run_multi_city_planning
+from routes.stripe_routes import router as stripe_router
 
 # Load environment variables
 load_dotenv()
@@ -46,6 +48,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Stripe routes
+app.include_router(stripe_router, prefix="/stripe", tags=["stripe"])
 
 # Initialize database on startup
 @app.on_event("startup")
@@ -79,7 +84,12 @@ def _format_trip_prompt(validated_request: TripPlanRequest) -> str:
     """
 
 
-def _execute_trip_planning(request: dict, progress_callback: Optional[Callable[[dict], None]] = None) -> dict:
+def _execute_trip_planning(
+    request: dict,
+    session: Session = None,
+    user_email: str = None,
+    progress_callback: Optional[Callable[[dict], None]] = None
+) -> dict:
     """Shared logic for running the multi-agent planning workflow."""
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(
@@ -93,6 +103,14 @@ def _execute_trip_planning(request: dict, progress_callback: Optional[Callable[[
             valid, message = validate_multi_city_trip(validated_request.trip_legs)
             if not valid:
                 raise HTTPException(status_code=400, detail=message)
+
+            # Check subscription for multi-city trips
+            if session and user_email:
+                if not has_active_subscription(session, user_email):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Multi-city trips require a premium subscription. Please upgrade to continue."
+                    )
 
             trip_legs = [leg.dict() for leg in validated_request.trip_legs]
             result = run_multi_city_planning(
@@ -130,27 +148,29 @@ def _format_sse(event: str, data: Optional[dict]) -> str:
 
 # Planner endpoint - Uses OpenAI Agents SDK
 @app.post("/planner/plan_trip")
-def plan_trip(request: dict):
+def plan_trip(request: dict, session: Session = Depends(get_session)):
     """
     Plan a complete trip using AI agents (supports both single-city and multi-city trips).
     This endpoint orchestrates multiple agents to search flights, hotels, and create an itinerary.
     """
-    return _execute_trip_planning(request)
+    user_email = request.get("user_email")
+    return _execute_trip_planning(request, session=session, user_email=user_email)
 
 
 @app.post("/planner/plan_trip_stream")
-async def plan_trip_stream(request: dict):
+async def plan_trip_stream(request: dict, session: Session = Depends(get_session)):
     """Stream workflow updates while the planner is running."""
 
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[tuple[str, Optional[dict]]] = asyncio.Queue()
+    user_email = request.get("user_email")
 
     def progress_callback(step: dict) -> None:
         loop.call_soon_threadsafe(queue.put_nowait, ("workflow_step", step))
 
     async def run_planner():
         def blocking_task():
-            return _execute_trip_planning(request, progress_callback=progress_callback)
+            return _execute_trip_planning(request, session=session, user_email=user_email, progress_callback=progress_callback)
 
         try:
             result = await asyncio.to_thread(blocking_task)
