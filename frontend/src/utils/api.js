@@ -213,4 +213,36 @@ export const createMultiCityBooking = async (bookingData) => {
   }
 };
 
+// Stripe Subscription Functions
+
+// Create Stripe checkout session
+export const createCheckoutSession = async (email) => {
+  try {
+    const response = await api.post('/stripe/create-checkout-session', { email });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Create Stripe billing portal session
+export const createPortalSession = async (email) => {
+  try {
+    const response = await api.post('/stripe/create-portal-session', { email });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Get subscription status
+export const getSubscriptionStatus = async (email) => {
+  try {
+    const response = await api.get(`/stripe/subscription-status/${email}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export default api;

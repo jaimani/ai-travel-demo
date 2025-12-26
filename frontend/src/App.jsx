@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import TripPlanner from './components/TripPlanner';
 import FlightsList from './components/FlightsList';
@@ -7,9 +7,14 @@ import BookingSummary from './components/BookingSummary';
 import MultiCityFlightsList from './components/MultiCityFlightsList';
 import MultiCityHotelsList from './components/MultiCityHotelsList';
 import MultiCityBookingSummary from './components/MultiCityBookingSummary';
+import { createPortalSession } from './utils/api';
 import './App.css';
 
 function App() {
+  // User subscription state
+  const [userEmail, setUserEmail] = useState('');
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+
   // Trip type state
   const [tripType, setTripType] = useState('multi');
 
@@ -129,6 +134,23 @@ function App() {
     setTripType('multi');
   };
 
+  const handleSubscriptionStatusChange = useCallback((email, status) => {
+    setUserEmail(email);
+    setSubscriptionStatus(status);
+  }, []);
+
+  const handleManageSubscription = async () => {
+    if (!userEmail) return;
+
+    try {
+      const { url } = await createPortalSession(userEmail);
+      window.location.href = url;
+    } catch (error) {
+      console.error('Failed to open billing portal:', error);
+      alert('Failed to open billing portal. Please try again.');
+    }
+  };
+
   // Helper to check if all multi-city selections are complete
   const isMultiCityComplete = () => {
     if (tripType !== 'multi' || !tripDetails || !tripDetails.cities) return false;
@@ -152,6 +174,16 @@ function App() {
           <h1 className="app-title">Llama Inc. Travel</h1>
           <p className="app-subtitle">AI-Powered Trip Planning</p>
         </div>
+        {subscriptionStatus?.hasActiveSubscription && (
+          <button
+            className="manage-subscription-btn"
+            onClick={handleManageSubscription}
+            title="Manage your subscription"
+          >
+            <span className="premium-badge">👑</span>
+            Manage Subscription
+          </button>
+        )}
       </header>
 
       <main className="app-main">
@@ -162,6 +194,7 @@ function App() {
             onHotelsFound={handleHotelsFound}
             onWorkflowReset={handleWorkflowReset}
             onWorkflowStep={handleWorkflowStep}
+            onSubscriptionStatusChange={handleSubscriptionStatusChange}
           />
 
           {workflowSteps.length > 0 && (

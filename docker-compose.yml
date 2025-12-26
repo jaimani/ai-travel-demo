@@ -9,7 +9,11 @@ services:
       - "8000:8000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_PRICE_LOOKUP_KEY=${STRIPE_PRICE_LOOKUP_KEY}
       - FRONTEND_URL=http://localhost:3000
+      - BACKEND_URL=http://localhost:8000
     volumes:
       - ./backend:/app
       - /app/__pycache__
@@ -26,6 +30,7 @@ services:
       - "3000:3000"
     environment:
       - VITE_API_URL=http://localhost:8000
+      - VITE_STRIPE_PUBLISHABLE_KEY=${VITE_STRIPE_PUBLISHABLE_KEY}
     volumes:
       - ./frontend:/app
       - /app/node_modules

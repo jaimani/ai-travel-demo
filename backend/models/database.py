@@ -4,6 +4,18 @@ from sqlmodel import SQLModel, Field, create_engine, Session
 from pydantic import BaseModel
 
 # Database Models
+class Customer(SQLModel, table=True):
+    """Customer/User model with subscription information"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    stripe_customer_id: Optional[str] = Field(default=None, unique=True, index=True)
+    subscription_status: str = "free"  # free, active, canceled, past_due
+    subscription_tier: str = "free"  # free, premium
+    stripe_subscription_id: Optional[str] = Field(default=None)
+    current_period_end: Optional[str] = None  # ISO timestamp
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
 class Booking(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_email: str
@@ -136,3 +148,45 @@ def create_db_and_tables():
 def get_session():
     with Session(engine) as session:
         yield session
+
+# Customer Management Functions
+def get_or_create_customer(session: Session, email: str) -> Customer:
+    """Get existing customer or create a new one"""
+    from sqlmodel import select
+    statement = select(Customer).where(Customer.email == email)
+    customer = session.exec(statement).first()
+
+    if not customer:
+        customer = Customer(email=email)
+        session.add(customer)
+        session.commit()
+        session.refresh(customer)
+
+    return customer
+
+def has_active_subscription(session: Session, email: str) -> bool:
+    """Check if a customer has an active premium subscription"""
+    from sqlmodel import select
+    statement = select(Customer).where(Customer.email == email)
+    customer = session.exec(statement).first()
+
+    if not customer:
+        return False
+
+    # Must be premium tier
+    if customer.subscription_tier != "premium":
+        return False
+
+    # Check if subscription is active
+    if customer.subscription_status != "active":
+        return False
+
+    # If current_period_end is set, check if subscription hasn't expired
+    if customer.current_period_end:
+        from datetime import datetime
+        expiry = datetime.fromisoformat(customer.current_period_end)
+        if expiry < datetime.utcnow():
+            return False
+
+    # If we get here, subscription is active and premium (and not expired if period_end is set)
+    return True
